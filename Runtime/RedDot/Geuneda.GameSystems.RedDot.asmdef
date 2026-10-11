@@ -1,0 +1,16 @@
+{
+    "name": "Geuneda.GameSystems.RedDot",
+    "rootNamespace": "Geuneda.GameSystems.RedDot",
+    "references": [
+        "Geuneda.Services"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
