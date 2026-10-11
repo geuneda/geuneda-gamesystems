@@ -51,6 +51,7 @@ MainInstaller.Bind<IRedDotService>(redDot);
 
 redDot.RegisterNode(RedDotPaths.Lobby_Shop_Free);   // 조상 노드는 자동 생성
 redDot.RegisterNode(RedDotPaths.Lobby_Quest);
+redDot.RegisterNode(RedDotPaths.Lobby_Season_Reward);
 ```
 
 경로 상수는 게임 쪽에 둡니다. 부모 상수를 이어 붙이면 오타가 생기지 않습니다.
@@ -62,6 +63,8 @@ public static class RedDotPaths
 	public const string Lobby_Shop = Lobby + "/Shop";
 	public const string Lobby_Shop_Free = Lobby_Shop + "/Free";
 	public const string Lobby_Quest = Lobby + "/Quest";
+	public const string Lobby_Season = Lobby + "/Season";
+	public const string Lobby_Season_Reward = Lobby_Season + "/Reward";
 
 	// 데이터 행마다 리프가 필요하면 함수로 만든다
 	public static string QuestLeaf(int questId) => Lobby_Quest + "/" + questId;
