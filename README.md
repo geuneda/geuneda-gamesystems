@@ -27,7 +27,7 @@ Addressables는 Unity 레지스트리에서 자동으로 설치됩니다.
 }
 ```
 
-버전 고정: `https://github.com/geuneda/geuneda-gamesystems.git#v0.1.0`
+버전 고정: `https://github.com/geuneda/geuneda-gamesystems.git#v0.2.0`
 
 ## 레드닷
 
@@ -77,22 +77,45 @@ redDot.SetLeafValue(RedDotPaths.Lobby_Quest, claimableQuestCount);   // 숫자 �
 
 ### 3. 표시 (뷰)
 
-`RedDotViewBase`를 상속해 표시 방식만 구현하고, 프리팹에 붙여 인스펙터에서 `_nodePath`를 지정합니다.
-활성화될 때 구독하고 비활성화될 때 해제하는 처리는 기반 클래스가 합니다.
+상속 없이 조합으로 씁니다. 두 가지 방법이 있습니다.
+
+**`RedDotView` 컴포넌트를 붙이기 (일반적인 경우)**
+
+프리팹에 `RedDotView`를 붙이고 인스펙터에서 `_nodePath`와 `_indicator`(켤 점 오브젝트)를 지정합니다.
+`RedDotView`는 계속 활성 상태인 오브젝트(버튼 등)에 두고, `_indicator`는 그 아래 별도 자식으로 지정합니다. 자신이나 조상을 지정하면 값이 0일 때 뷰가 스스로 꺼지므로 무시하고 오류를 남깁니다.
+활성화될 때 구독하고 비활성화될 때 해제합니다. 숫자 배지나 애니메이션 같은 추가 표시는 다른 컴포넌트가 `ValueChanged`를 구독해 붙입니다. 핸들러 예외는 로그만 남기고 나머지 핸들러는 계속 호출되며, 앞선 핸들러가 경로를 바꾸거나 뷰를 끄면 남은 핸들러에는 옛 값을 보내지 않습니다.
 
 ```csharp
-public class RedDotView : RedDotViewBase
+public sealed class RedDotCountLabel : MonoBehaviour
 {
-	[SerializeField] private GameObject _dot;
+	[SerializeField] private RedDotView _redDot;
+	[SerializeField] private TMP_Text _label;
 
-	protected override void OnValueChanged(int value)
+	private void OnEnable()
 	{
-		_dot.SetActive(value > 0);
+		_redDot.ValueChanged += Show;
+		Show(_redDot.Value);
 	}
+
+	private void OnDisable() => _redDot.ValueChanged -= Show;
+
+	private void Show(int value) => _label.text = value > 99 ? "99+" : value.ToString();
 }
 ```
 
 리스트 셀처럼 경로가 데이터에 따라 바뀌면 `SetNodePath(path)`를 호출합니다.
+
+**`RedDotBinding`을 직접 쓰기 (자체 뷰가 있을 때)**
+
+구독 처리만 담은 POCO입니다. 자기 MonoBehaviour의 필드로 들고 생명주기에 맞춰 호출합니다.
+
+```csharp
+private RedDotBinding _binding;
+
+private void Awake() => _binding = new RedDotBinding(OnRedDotChanged);
+private void OnEnable() => _binding.Bind(RedDotPaths.Lobby_Shop);   // 서비스는 MainInstaller 에서 찾음
+private void OnDisable() => _binding.Unbind();
+```
 
 ### 뮤트
 
@@ -109,7 +132,7 @@ redDot.SetNodeMuted(RedDotPaths.Lobby_Season, !isSeasonOpen);
 - 부모 노드의 값은 자식 합이며 직접 설정할 수 없습니다. 자식 합이 int 범위를 넘으면 `int.MaxValue`로 표시합니다. 리프에 자식이 생기면 기존 리프 값은 버립니다.
 - 값을 바꾸는 메서드는 트리 전체를 먼저 갱신하고, 끝나기 직전에 값이 바뀐 경로의 구독자를 호출합니다. 그래서 콜백 안에서는 항상 일관된 트리를 봅니다.
 - 콜백 안에서 다른 값을 바꿔도 됩니다. 변경은 즉시 반영되고 그 알림은 이어서 전달됩니다. 각 구독자가 마지막으로 받는 값은 항상 현재 값이며, 중간에 거친 값(예: 제거 후 즉시 재등록)은 생략될 수 있습니다.
-- 구독 콜백은 그 구독자가 마지막으로 받은 값과 달라졌을 때만 호출됩니다. 구독 시점의 값은 전달되지 않으므로 구독 직후 `GetValue`로 읽습니다(`RedDotViewBase`가 이렇게 합니다).
+- 구독 콜백은 그 구독자가 마지막으로 받은 값과 달라졌을 때만 호출됩니다. 구독 시점의 값은 전달되지 않으므로 구독 직후 `GetValue`로 읽습니다(`RedDotBinding`이 이렇게 합니다).
 - 해제한 구독자는 진행 중인 알림 안에서도 다시 호출되지 않습니다. 콜백 예외는 로그로 남기고 나머지 구독자 알림은 계속합니다.
 - 아직 등록하지 않은 경로도 구독할 수 있고, 등록되는 순간부터 알림을 받습니다.
 - `UnregisterNode`와 `Clear`는 값이 있던 노드의 구독자에게 0을 알리고, 구독은 유지합니다. 같은 경로를 다시 등록하면 이어서 알림을 받습니다.
@@ -117,8 +140,9 @@ redDot.SetNodeMuted(RedDotPaths.Lobby_Season, !isSeasonOpen);
 
 ## 패키지 원칙
 
+- geuneda 프레임워크 규칙을 따릅니다. 상속 대신 조합을 쓰고, MonoBehaviour는 sealed로 Unity 연결만 맡으며 로직은 POCO에 둡니다.
 - 기능끼리는 서로 참조하지 않습니다. 기능은 `com.geuneda.gamedata`, `com.geuneda.services`에만 의존합니다.
-- 게임 규칙, 경로, 수치는 넣지 않습니다. 게임마다 다른 부분은 훅이나 상속으로 열어 둡니다.
+- 게임 규칙, 경로, 수치는 넣지 않습니다. 게임마다 다른 부분은 델리게이트, 이벤트, 인터페이스로 열어 둡니다.
 - 기능이 커지거나 외부 의존성이 생기면 독립 패키지로 분리합니다.
 
 ## 라이선스

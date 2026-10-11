@@ -4,6 +4,17 @@
 이 형식은 [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)를 기반으로 하며,
 이 프로젝트는 [유의적 버전](http://semver.org/spec/v2.0.0.html)을 따릅니다.
 
+## [0.2.0] - 2026-10-12
+
+**변경 (호환되지 않음)**:
+- `RedDotViewBase`(상속용 abstract MonoBehaviour)를 제거했습니다. geuneda 프레임워크 규칙(2단계 이상 MonoBehaviour 상속 금지, 상속 대신 조합)에 맞추기 위해서입니다.
+
+**신규**:
+- `RedDotBinding`: 경로 하나의 구독, 해제, 경로 교체를 처리하는 POCO. 자체 뷰의 필드로 들고 OnEnable/OnDisable 에서 `Bind`/`Unbind` 합니다.
+- `RedDotView`: 프리팹에 그대로 붙이는 sealed 컴포넌트. 값이 1 이상이면 표시 오브젝트를 켜고, 추가 표시는 `ValueChanged` 이벤트와 `Value` 프로퍼티로 붙입니다.
+  - `ValueChanged` 핸들러 예외는 핸들러 단위로 격리하고, 앞선 핸들러가 경로를 바꾸거나 뷰를 끄면 남은 핸들러에 옛 값을 보내지 않습니다.
+  - 표시 오브젝트로 자신이나 조상을 지정하면(값 0일 때 뷰가 스스로 꺼져 구독이 끊김) 무시하고 오류를 남깁니다.
+
 ## [0.1.0] - 2026-10-11
 
 **신규**:

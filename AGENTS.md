@@ -5,7 +5,7 @@
 ## 1. 패키지 개요
 - **패키지**: `com.geuneda.gamesystems`
 - **Unity**: 6000.3+
-- **의존성**: `com.geuneda.services` (**2.1.0**) — `RedDotViewBase`가 `MainInstaller`로 서비스를 찾습니다.
+- **의존성**: `com.geuneda.services` (**2.1.0**) — `RedDotBinding.Bind(path)`가 `MainInstaller`로 서비스를 찾습니다.
 
 여러 게임 프로젝트에서 반복해서 구현하던 게임 시스템을 모은 패키지입니다.
 한 기능은 `Runtime/<Feature>/` 폴더 하나와 asmdef 하나로 구성합니다.
@@ -14,7 +14,8 @@
 
 - `Runtime/<Feature>/Geuneda.GameSystems.<Feature>.asmdef`, 네임스페이스 `Geuneda.GameSystems.<Feature>`.
 - **기능 asmdef끼리 서로 참조하지 않습니다.** 의존은 `Geuneda.GameData`, `Geuneda.Services`까지만 허용합니다.
-- 게임 규칙, 경로 상수, 밸런스 수치는 넣지 않습니다. 게임마다 다른 부분은 훅(델리게이트, 인터페이스)이나 상속으로 엽니다.
+- 게임 규칙, 경로 상수, 밸런스 수치는 넣지 않습니다. 게임마다 다른 부분은 훅(델리게이트, 이벤트, 인터페이스)으로 엽니다.
+- **geuneda 프레임워크 규칙(geuneda-frameworks `CLAUDE.md`)을 따릅니다.** 상속을 요구하는 기반 MonoBehaviour를 만들지 않습니다(2단계 이상 MonoBehaviour 상속 금지). 공개 MonoBehaviour는 `sealed`로 Unity 연결만 맡고, 로직은 POCO에 둡니다. 확장은 이벤트 구독이나 POCO 조합으로 엽니다.
 - 테스트: 순수 로직은 `Tests/EditMode/<Feature>/`, MonoBehaviour 생명주기는 `Tests/PlayMode/<Feature>/`.
 - 외부 의존(UniTask, Addressables 등)이 필요하거나 기능이 커지면 독립 패키지로 분리합니다.
 - 기능 추가 시 `README.md` 기능 표, `CHANGELOG.md`, `package.json` 버전을 함께 갱신합니다.
@@ -28,7 +29,8 @@
 | `RedDotNode` | internal | 트리 노드. 값과 변화량 전파, 바뀐 구독을 대기열에 넣음 |
 | `RedDotSubscription` | internal | 한 경로의 구독자 목록과 대기열 여부 |
 | `RedDotListener` | internal | 구독자 하나. 콜백, 이 구독자에게 마지막으로 전달한 값, 활성 여부 |
-| `RedDotViewBase` | public | 구독 생명주기를 처리하는 뷰 기반 클래스 |
+| `RedDotBinding` | public | 경로 하나의 구독/해제/경로 교체를 처리하는 POCO. 바인딩마다 고유 델리게이트로 구독 |
+| `RedDotView` | public sealed | 프리팹용 컴포넌트. `RedDotBinding`으로 구독하고 표시 오브젝트 토글 + `ValueChanged` 이벤트. 이벤트는 일반 멀티캐스트 델리게이트로 저장하고(+=, -= 규칙 그대로) 등록/해제 때만 호출 목록 캐시를 갱신해 발행 시 할당이 없다. 발행마다 세대 번호를 올리고 호출 단위(합성 델리게이트도 펼침)로 호출 전마다 검사해, 중첩 `Apply`(핸들러 안 경로 변경)나 `OnDisable` 뒤에는 남은 핸들러에 옛 값을 보내지 않음. 핸들러별 try/catch. 자신/조상을 `_indicator`로 지정하면 무시(Awake 오류, OnValidate 경고) |
 
 ### 설계 불변식 (수정 시 깨지지 않게 유지)
 
