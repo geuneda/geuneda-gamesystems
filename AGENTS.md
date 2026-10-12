@@ -5,7 +5,7 @@
 ## 1. 패키지 개요
 - **패키지**: `com.geuneda.gamesystems`
 - **Unity**: 6000.3+
-- **의존성**: `com.geuneda.services` (**2.1.0**) — `RedDotBinding.Bind(path)`가 `MainInstaller`로 서비스를 찾습니다.
+- **의존성**: `com.geuneda.services` (2.1.0) — `RedDotBinding.Bind(path)`가 `MainInstaller`로 서비스를 찾습니다. 레드닷 asmdef는 `Geuneda.Services`만 참조합니다.
 
 여러 게임 프로젝트에서 반복해서 구현하던 게임 시스템을 모은 패키지입니다.
 한 기능은 `Runtime/<Feature>/` 폴더 하나와 asmdef 하나로 구성합니다.
@@ -18,7 +18,7 @@
 - **geuneda 프레임워크 규칙(geuneda-frameworks `CLAUDE.md`)을 따릅니다.** 상속을 요구하는 기반 MonoBehaviour를 만들지 않습니다(2단계 이상 MonoBehaviour 상속 금지). 공개 MonoBehaviour는 `sealed`로 Unity 연결만 맡고, 로직은 POCO에 둡니다. 확장은 이벤트 구독이나 POCO 조합으로 엽니다.
 - 테스트: 순수 로직은 `Tests/EditMode/<Feature>/`, MonoBehaviour 생명주기는 `Tests/PlayMode/<Feature>/`.
 - 외부 의존(UniTask, Addressables 등)이 필요하거나 기능이 커지면 독립 패키지로 분리합니다.
-- 기능 추가 시 `README.md` 기능 표, `CHANGELOG.md`, `package.json` 버전을 함께 갱신합니다.
+- 기능 추가 시 `README.md` 기능 표, `CHANGELOG.md`, `package.json` 버전을 함께 갱신합니다. geuneda-frameworks 메타 레포의 스킬 문서(`claude-skills/geuneda-gamesystems/`)도 맞춰 고칩니다.
 
 ## 3. 레드닷 (`Runtime/RedDot/`)
 
@@ -52,9 +52,11 @@
 "testables": ["com.geuneda.gamesystems"]
 ```
 
+에디터의 Test Runner 창(`Window > General > Test Runner`)에서 EditMode, PlayMode 탭을 각각 실행하거나, 배치 모드로 실행합니다.
+
 ```bash
-unity test <host-project> --mode EditMode
-unity test <host-project> --mode PlayMode
+<Unity 실행 파일> -batchmode -projectPath <host-project> -runTests -testPlatform EditMode -testResults editmode.xml
+<Unity 실행 파일> -batchmode -projectPath <host-project> -runTests -testPlatform PlayMode -testResults playmode.xml
 ```
 
 ## 5. 코드 규칙
