@@ -4,6 +4,12 @@
 이 형식은 [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)를 기반으로 하며,
 이 프로젝트는 [유의적 버전](http://semver.org/spec/v2.0.0.html)을 따릅니다.
 
+## [0.2.1] - 2026-10-12
+
+**수정**:
+- 문서를 실제 소스 기준으로 정비했습니다(README, 스킬 문서).
+- `RedDotBinding` XML 예제의 경로 상수 클래스 이름을 README 예제와 같은 `RedDotPaths` 로 맞췄습니다.
+
 ## [0.2.0] - 2026-10-12
 
 **변경 (호환되지 않음)**:

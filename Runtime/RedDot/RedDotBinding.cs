@@ -11,7 +11,7 @@ namespace Geuneda.GameSystems.RedDot
 	/// <code>
 	/// private RedDotBinding _binding;
 	/// private void Awake() => _binding = new RedDotBinding(OnRedDotChanged);
-	/// private void OnEnable() => _binding.Bind(MyRedDotPaths.Lobby_Shop);
+	/// private void OnEnable() => _binding.Bind(RedDotPaths.Lobby_Shop);
 	/// private void OnDisable() => _binding.Unbind();
 	/// </code>
 	/// </example>

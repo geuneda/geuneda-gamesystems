@@ -2,7 +2,7 @@
   "name": "com.geuneda.gamesystems",
   "displayName": "Geuneda Game Systems",
   "author": "geuneda",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "unity": "6000.3",
   "license": "MIT",
   "description": "여러 게임에서 반복해서 만드는 게임 시스템을 모아 둔 패키지입니다. 기능마다 어셈블리가 나뉘어 있어 필요한 것만 참조합니다. 현재 기능: 레드닷(경로 트리 기반 알림 배지).",
