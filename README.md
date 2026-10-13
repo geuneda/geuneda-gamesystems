@@ -9,7 +9,7 @@
 
 ## 설치
 
-`com.geuneda.services`와 그 의존성(gamedata, UniTask)이 함께 필요합니다.
+`com.geuneda.services`와 그 의존성(core, gamedata, UniTask)이 함께 필요합니다.
 UPM은 git 패키지의 git 의존성을 자동으로 받지 못하므로 아래 항목을 모두 `Packages/manifest.json`에 넣습니다.
 Addressables 등 Unity 레지스트리에 있는 의존성은 자동으로 설치됩니다.
 
@@ -17,6 +17,7 @@ Addressables 등 Unity 레지스트리에 있는 의존성은 자동으로 설�
 {
   "dependencies": {
     "com.cysharp.unitask": "https://github.com/Cysharp/UniTask.git?path=src/UniTask/Assets/Plugins/UniTask",
+    "com.geuneda.core": "https://github.com/geuneda/geuneda-core.git",
     "com.geuneda.gamedata": "https://github.com/geuneda/geuneda-gamedata.git",
     "com.geuneda.services": "https://github.com/geuneda/geuneda-services.git",
     "com.geuneda.gamesystems": "https://github.com/geuneda/geuneda-gamesystems.git"
@@ -162,7 +163,7 @@ redDot.SetNodeMuted(RedDotPaths.Lobby_Season, !isSeasonOpen);
 ## 요구 사항과 의존성
 
 - Unity 6000.3 이상
-- `com.geuneda.services` 2.1.0 (gamedata, UniTask, Addressables를 함께 끌어옵니다)
+- `com.geuneda.services` 2.1.0 (core, gamedata, UniTask, Addressables를 함께 끌어옵니다)
 - 기능끼리는 서로 참조하지 않으며, 기능 어셈블리는 `Geuneda.GameData`, `Geuneda.Services`에만 의존할 수 있습니다. 레드닷은 `Geuneda.Services`만 참조합니다.
 
 ## 라이선스
