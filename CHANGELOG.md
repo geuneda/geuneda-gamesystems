@@ -4,10 +4,10 @@
 이 형식은 [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)를 기반으로 하며,
 이 프로젝트는 [유의적 버전](http://semver.org/spec/v2.0.0.html)을 따릅니다.
 
-## [Unreleased]
+## [0.2.2] - 2026-10-13
 
 **변경**:
-- 설치 안내의 manifest 목록에 `com.geuneda.core` 를 추가했습니다. services 다음 메이저 버전이 core(빌드 환경 `AppEnv`)에 의존합니다.
+- 설치 안내의 manifest 목록에 `com.geuneda.core` 를 추가했습니다. services 3.0.0 이 core(빌드 환경 `AppEnv`)에 의존합니다.
 
 ## [0.2.1] - 2026-10-12
 
