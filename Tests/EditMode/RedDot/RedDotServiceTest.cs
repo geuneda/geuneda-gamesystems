@@ -600,6 +600,56 @@ namespace GeunedaEditor.GameSystems.Tests
 			CollectionAssert.AreEqual(new[] { 0, 1 }, received);
 		}
 
+		[Test]
+		public void Paths_IsSnapshotNotAffectedByLaterChanges()
+		{
+			_service.RegisterNode("A");
+			var paths = _service.Paths;
+
+			_service.RegisterNode("B");
+
+			CollectionAssert.AreEquivalent(new[] { "A" }, paths);
+			CollectionAssert.AreEquivalent(new[] { "A", "B" }, _service.Paths);
+		}
+
+		[Test]
+		public void Paths_EnumeratingWhileRegistering_DoesNotThrow()
+		{
+			_service.RegisterNode("A");
+			_service.RegisterNode("B");
+
+			Assert.DoesNotThrow(() =>
+			{
+				foreach (var path in _service.Paths)
+				{
+					_service.RegisterNode(path + "/X");
+				}
+			});
+
+			CollectionAssert.AreEquivalent(new[] { "A", "A/X", "B", "B/X" }, _service.Paths);
+		}
+
+		[Test]
+		public void Paths_CannotBeModifiedThroughCast()
+		{
+			_service.RegisterNode("A");
+
+			Assert.IsFalse(_service.Paths is string[]);
+			Assert.Throws<NotSupportedException>(() => ((ICollection<string>)_service.Paths).Add("B"));
+		}
+
+		[Test]
+		public void Paths_UnchangedTree_ReturnsSameSnapshot()
+		{
+			_service.RegisterNode("A");
+
+			Assert.AreSame(_service.Paths, _service.Paths);
+
+			_service.UnregisterNode("A");
+
+			CollectionAssert.IsEmpty(_service.Paths);
+		}
+
 		/// <summary>
 		/// 공개 API 로 트리 불변식을 확인한다: 모든 경로의 부모가 등록돼 있고,
 		/// 자식이 있는 노드의 값은 자식 값의 합이다 (뮤트가 없는 테스트에서만 쓴다).

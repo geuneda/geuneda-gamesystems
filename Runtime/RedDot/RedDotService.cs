@@ -1,6 +1,7 @@
 using System;
 using System.Buffers;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using UnityEngine;
 
 namespace Geuneda.GameSystems.RedDot
@@ -11,14 +12,40 @@ namespace Geuneda.GameSystems.RedDot
 		/// <summary> 경로 계층 구분자 </summary>
 		public const char Separator = '/';
 
+		/// <summary> 한 번의 알림 처리에서 경로 하나를 알릴 수 있는 최대 횟수. 넘으면 콜백이 값을 계속 바꾸는 순환으로 본다. </summary>
+		internal const int MaxNotificationsPerPath = 100;
+
 		private readonly Dictionary<string, RedDotNode> _nodes = new Dictionary<string, RedDotNode>();
 		private readonly Dictionary<string, RedDotSubscription> _subscriptions = new Dictionary<string, RedDotSubscription>();
 		private readonly List<RedDotSubscription> _pending = new List<RedDotSubscription>();
+		private readonly List<int> _openBatches = new List<int>();
+		private readonly Action<int> _endBatch;
+
+		// 한 번의 Flush 에서 경로별로 알린 횟수. 구독 객체가 아니라 경로로 세야 콜백이 해제 후 재구독해도 상한이 유지된다.
+		private readonly Dictionary<string, int> _notificationCounts = new Dictionary<string, int>();
 
 		private bool _flushing;
+		private int _lastBatchId;
+		private ReadOnlyCollection<string> _paths;
+
+		/// <summary> 빈 트리로 만든다. </summary>
+		public RedDotService()
+		{
+			// 범위마다 델리게이트를 만들지 않도록 한 번만 만든다.
+			_endBatch = EndBatch;
+		}
 
 		/// <inheritdoc />
-		public IReadOnlyCollection<string> Paths => _nodes.Keys;
+		public IReadOnlyCollection<string> Paths => _paths ??= Array.AsReadOnly(CopyPaths());
+
+		/// <summary> 경로별 노드. 에디터 디버그 창이 트리를 읽을 때 쓴다. </summary>
+		internal IReadOnlyDictionary<string, RedDotNode> Nodes => _nodes;
+
+		/// <summary> 경로별 구독. 에디터 디버그 창이 등록되지 않은 경로의 구독을 찾을 때 쓴다. </summary>
+		internal IReadOnlyDictionary<string, RedDotSubscription> Subscriptions => _subscriptions;
+
+		/// <summary> 열려 있는 일괄 범위 수. 0보다 크면 알림이 미뤄지고 있다. </summary>
+		internal int OpenBatchCount => _openBatches.Count;
 
 		/// <inheritdoc />
 		public void RegisterNode(string path)
@@ -168,6 +195,29 @@ namespace Geuneda.GameSystems.RedDot
 			}
 
 			_nodes.Clear();
+			_paths = null;
+			Flush();
+		}
+
+		/// <inheritdoc />
+		public RedDotBatch BeginBatch()
+		{
+			int id = ++_lastBatchId;
+			_openBatches.Add(id);
+			return new RedDotBatch(_endBatch, id);
+		}
+
+		/// <summary>
+		/// 일괄 범위를 끝낸다. 이미 끝난 범위면 아무것도 하지 않는다. 열린 범위가 더 없으면 미뤄 둔 알림을 보낸다.
+		/// </summary>
+		/// <param name="id">끝낼 범위의 ID</param>
+		private void EndBatch(int id)
+		{
+			if (!_openBatches.Remove(id))
+			{
+				return;
+			}
+
 			Flush();
 		}
 
@@ -180,6 +230,7 @@ namespace Geuneda.GameSystems.RedDot
 			}
 
 			_nodes[path] = node;
+			_paths = null;
 			parent?.AddChild(node);
 			return node;
 		}
@@ -199,32 +250,57 @@ namespace Geuneda.GameSystems.RedDot
 
 			node.Subscription?.EnqueueTo(_pending);
 			_nodes.Remove(node.Path);
+			_paths = null;
 		}
 
 		/// <summary>
-		/// 알림 대기열의 구독을 차례로 알린다.
+		/// 알림 대기열의 구독을 차례로 알린다. 일괄 범위가 열려 있으면 알리지 않고 대기열에 둔다.
 		/// 콜백 안에서 일어난 변경은 즉시 반영되고, 그 구독은 대기열 뒤에 다시 붙어 같은 Flush 안에서 이어서 알린다.
+		/// 콜백이 일괄 범위를 열면 남은 구독은 대기열에 둔 채 멈추고, 그 범위가 끝날 때 이어서 알린다.
 		/// </summary>
 		private void Flush()
 		{
-			if (_flushing)
+			if (_flushing || _openBatches.Count > 0)
 			{
 				return;
 			}
 
 			_flushing = true;
+			_notificationCounts.Clear();
+			int processed = 0;
 			try
 			{
-				for (int i = 0; i < _pending.Count; i++)
+				while (processed < _pending.Count && _openBatches.Count == 0)
 				{
-					var subscription = _pending[i];
+					var subscription = _pending[processed++];
 					subscription.Queued = false;
+
+					// 마지막 구독자가 해제된 구독 객체는 사전에서 빠져도 대기열에는 남는다. 알릴 대상이 없으니 횟수에 넣지 않는다.
+					if (subscription.Listeners.Count == 0)
+					{
+						continue;
+					}
+
+					_notificationCounts.TryGetValue(subscription.Path, out int count);
+					_notificationCounts[subscription.Path] = ++count;
+					if (count > MaxNotificationsPerPath)
+					{
+						// 콜백끼리 값을 계속 바꾸면 이 루프가 끝나지 않아 게임이 멈춘다. 이 경로는 이번 처리에서 그만 알린다.
+						if (count == MaxNotificationsPerPath + 1)
+						{
+							Debug.LogError($"[RedDot] '{subscription.Path}' 알림이 한 번의 처리에서 {MaxNotificationsPerPath}번을 넘었다. 콜백이 값을 계속 바꾸는 순환으로 보고 이번 처리에서는 더 알리지 않는다.");
+						}
+
+						continue;
+					}
+
 					NotifyListeners(subscription);
 				}
 			}
 			finally
 			{
-				_pending.Clear();
+				// 처리한 것만 뺀다. 남은 구독은 Queued 상태로 대기열에 남아 다음 Flush 에서 알린다.
+				_pending.RemoveRange(0, processed);
 				_flushing = false;
 			}
 		}
@@ -233,6 +309,7 @@ namespace Geuneda.GameSystems.RedDot
 		/// 한 경로의 구독자를 하나씩 알린다. 구독자마다 호출 직전에 현재 값을 다시 읽고,
 		/// 그 구독자에게 마지막으로 전달한 값과 다를 때만 호출한다. 그래서 구독자가 마지막으로 받는 값은 항상 현재 값이다.
 		/// 목록은 스냅샷으로 순회하며, 도중에 해제된 구독자는 호출하지 않는다.
+		/// 도중에 일괄 범위가 열리면 이 구독을 대기열에 다시 넣고 멈춘다.
 		/// </summary>
 		/// <param name="subscription">알릴 경로의 구독</param>
 		private void NotifyListeners(RedDotSubscription subscription)
@@ -250,6 +327,14 @@ namespace Geuneda.GameSystems.RedDot
 			{
 				for (int i = 0; i < count; i++)
 				{
+					// 앞선 콜백이 일괄 범위를 열었으면 남은 구독자는 그 범위가 끝날 때 알린다.
+					// 이미 알린 구독자는 전달한 값이 현재 값과 같아 다시 호출되지 않는다.
+					if (_openBatches.Count > 0)
+					{
+						subscription.EnqueueTo(_pending);
+						return;
+					}
+
 					var listener = snapshot[i];
 					if (!listener.Active)
 					{
@@ -278,6 +363,13 @@ namespace Geuneda.GameSystems.RedDot
 			{
 				ArrayPool<RedDotListener>.Shared.Return(snapshot, true);
 			}
+		}
+
+		private string[] CopyPaths()
+		{
+			var paths = new string[_nodes.Count];
+			_nodes.Keys.CopyTo(paths, 0);
+			return paths;
 		}
 
 		private static void ValidatePath(string path)

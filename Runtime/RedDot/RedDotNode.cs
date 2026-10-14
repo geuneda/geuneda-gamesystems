@@ -46,18 +46,13 @@ namespace Geuneda.GameSystems.RedDot
 		/// 상위로 전파되는 값. 뮤트 중이면 0, 리프면 직접 값, 부모면 자식 합이다.
 		/// 자식 합이 int 범위를 넘으면 <see cref="int.MaxValue"/> 로 포화한다(내부 합은 long 으로 보존).
 		/// </summary>
-		public int Value
-		{
-			get
-			{
-				if (_muted)
-				{
-					return 0;
-				}
+		public int Value => _muted ? 0 : UnmutedValue;
 
-				return IsLeaf ? _leafValue : (int)Math.Min(_childSum, int.MaxValue);
-			}
-		}
+		/// <summary> 뮤트를 무시한 값. 리프면 직접 값, 부모면 자식 합(int 범위로 포화)이다. 디버그 표시에 쓴다. </summary>
+		public int UnmutedValue => IsLeaf ? _leafValue : (int)Math.Min(_childSum, int.MaxValue);
+
+		/// <summary> 뮤트 여부 </summary>
+		public bool Muted => _muted;
 
 		/// <summary> 리프 값을 설정한다. 음수는 0으로 보정한다. </summary>
 		/// <param name="value">설정할 값</param>

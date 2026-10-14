@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Reflection;
 using System.Text.RegularExpressions;
@@ -6,6 +7,7 @@ using Geuneda.GameSystems.RedDot;
 using Geuneda.Services;
 using NUnit.Framework;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 using UnityEngine.TestTools;
 using Object = UnityEngine.Object;
 
@@ -48,8 +50,9 @@ namespace Geuneda.GameSystems.Tests
 		[TearDown]
 		public void Cleanup()
 		{
-			MainInstaller.Clean<IRedDotService>();
+			// 뷰는 MainInstaller 정리를 따라가므로, 정리 알림이 테스트의 핸들러를 다시 부르지 않게 먼저 파괴한다.
 			Object.DestroyImmediate(_gameObject);
+			MainInstaller.Clean<IRedDotService>();
 		}
 
 		[Test]
@@ -293,6 +296,109 @@ namespace Geuneda.GameSystems.Tests
 
 			Assert.AreEqual(0, _view.Value);
 			Assert.IsFalse(_indicator.activeSelf, "프리팹 기본값으로 켜져 있던 표시도 끈다");
+		}
+
+		[Test]
+		public void ServiceBoundAfterEnable_ShowsValueWithoutReenable()
+		{
+			MainInstaller.Clean<IRedDotService>();
+			_service.SetLeafValue("A", 2);
+			_gameObject.SetActive(true);
+
+			Assert.AreEqual(0, _view.Value);
+
+			MainInstaller.Bind<IRedDotService>(_service);
+
+			Assert.AreEqual(2, _view.Value);
+			Assert.IsTrue(_indicator.activeSelf);
+			CollectionAssert.AreEqual(new[] { 0, 2 }, _received);
+
+			_service.SetLeafValue("A", 0);
+
+			Assert.IsFalse(_indicator.activeSelf);
+		}
+
+		[Test]
+		public void ServiceReplacedWhileActive_FollowsNewService()
+		{
+			_gameObject.SetActive(true);
+			var next = new RedDotService();
+			next.RegisterNode("A");
+			next.SetLeafValue("A", 3);
+
+			MainInstaller.Clean<IRedDotService>();
+
+			Assert.AreEqual(0, _view.Value);
+
+			MainInstaller.Bind<IRedDotService>(next);
+			_service.SetLeafValue("A", 1);
+
+			Assert.AreEqual(3, _view.Value);
+			Assert.IsTrue(_indicator.activeSelf);
+			// 정리 때는 이미 0이라 다시 보내지 않는다.
+			CollectionAssert.AreEqual(new[] { 0, 3 }, _received);
+		}
+
+		[Test]
+		public void DisabledView_ServiceBound_IsNotNotified()
+		{
+			MainInstaller.Clean<IRedDotService>();
+			_gameObject.SetActive(true);
+			_gameObject.SetActive(false);
+			int countAfterDisable = _received.Count;
+			_service.SetLeafValue("A", 1);
+
+			MainInstaller.Bind<IRedDotService>(_service);
+
+			Assert.AreEqual(countAfterDisable, _received.Count);
+
+			_gameObject.SetActive(true);
+
+			Assert.AreEqual(1, _view.Value);
+		}
+
+		[UnityTest]
+		public IEnumerator SceneUnload_BootstrapCleansInstallerInOnDestroy_NoErrors()
+		{
+			// 흔한 부트스트랩은 OnDestroy 에서 MainInstaller.Clean() 을 부른다. 씬이 내려가는 중에 아직 켜진 뷰가 0을 받아도 오류가 없어야 한다.
+			var scene = SceneManager.CreateScene("RedDotViewUnloadTest");
+			var bootstrap = new GameObject("Bootstrap");
+			bootstrap.AddComponent<CleanInstallerOnDestroy>();
+			SceneManager.MoveGameObjectToScene(bootstrap, scene);
+
+			var views = new List<RedDotView>();
+			for (int i = 0; i < 3; i++)
+			{
+				var root = new GameObject($"View{i}");
+				root.SetActive(false);
+				var indicator = new GameObject("Indicator");
+				indicator.transform.SetParent(root.transform);
+				var view = root.AddComponent<RedDotView>();
+				typeof(RedDotView)
+					.GetField("_indicator", BindingFlags.Instance | BindingFlags.NonPublic)
+					.SetValue(view, indicator);
+				view.SetNodePath("A");
+				SceneManager.MoveGameObjectToScene(root, scene);
+				root.SetActive(true);
+				views.Add(view);
+			}
+
+			_service.SetLeafValue("A", 1);
+
+			Assert.AreEqual(1, views[2].Value);
+
+			yield return SceneManager.UnloadSceneAsync(scene);
+
+			Assert.IsFalse(MainInstaller.TryResolve<IRedDotService>(out _));
+			LogAssert.NoUnexpectedReceived();
+		}
+
+		private sealed class CleanInstallerOnDestroy : MonoBehaviour
+		{
+			private void OnDestroy()
+			{
+				MainInstaller.Clean();
+			}
 		}
 	}
 }

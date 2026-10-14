@@ -14,10 +14,15 @@ namespace Geuneda.GameSystems.RedDot
 	/// 그 사이에 거친 중간 값(예: 제거 후 즉시 재등록)은 생략될 수 있다.
 	/// 해제된 구독자는 진행 중인 알림 안에서도 다시 호출되지 않는다.
 	/// 콜백에서 던진 예외는 로그로 남기고 나머지 구독자 알림은 계속한다.
+	/// 한 번의 알림 처리에서 같은 경로를 100번 넘게 알리게 되면(콜백이 값을 계속 바꾸는 순환) 오류를 남기고
+	/// 그 처리에서는 그 경로를 더 알리지 않는다. 그 구독자는 다음에 값이 바뀔 때 현재 값을 받는다.
 	/// </remarks>
 	public interface IRedDotService
 	{
-		/// <summary> 등록된 모든 노드 경로. 디버그 도구에서 트리를 나열할 때 쓴다. </summary>
+		/// <summary>
+		/// 등록된 모든 노드 경로의 읽기 전용 스냅샷. 디버그 도구에서 트리를 나열할 때 쓴다.
+		/// 읽은 뒤에 노드가 바뀌어도 이 컬렉션은 바뀌지 않으므로, 순회 중에 노드를 등록·제거해도 된다.
+		/// </summary>
 		IReadOnlyCollection<string> Paths { get; }
 
 		/// <summary> 경로에 노드를 등록한다. 없는 조상 노드는 자동으로 만든다. 이미 있으면 아무것도 하지 않는다. </summary>
@@ -74,5 +79,28 @@ namespace Geuneda.GameSystems.RedDot
 		/// 구독은 화면 쪽 생명주기가 관리하므로 유지된다.
 		/// </summary>
 		void Clear();
+
+		/// <summary>
+		/// 일괄 변경 범위를 연다. 범위가 열려 있는 동안 값 변경은 즉시 반영되지만(<see cref="GetValue"/> 는 바뀐 값을 돌려줌)
+		/// 구독자 알림은 미룬다. 열린 범위가 모두 끝나면 값이 바뀐 경로의 구독자에게 최종 값으로 한 번씩 알린다.
+		/// 그래서 리프 여러 개를 바꿔도 부모 구독자는 한 번만 호출되고, 범위 안에서 원래 값으로 돌아온 경로는 알리지 않는다.
+		/// </summary>
+		/// <remarks>
+		/// 범위는 중첩할 수 있다. 콜백 안에서 연 범위도 같은 규칙이라, 그 범위가 끝날 때까지 남은 알림을 미룬다.
+		/// 끝내지 않은 범위가 남으면 알림이 계속 미뤄지므로 항상 <c>using</c> 으로 감싼다.
+		/// </remarks>
+		/// <example>
+		/// <code>
+		/// using (redDot.BeginBatch())
+		/// {
+		///     foreach (var mail in mails)
+		///     {
+		///         redDot.SetLeafValue(mail.RedDotPath, 1);
+		///     }
+		/// }
+		/// </code>
+		/// </example>
+		/// <returns>Dispose 하면 범위가 끝나는 값</returns>
+		RedDotBatch BeginBatch();
 	}
 }

@@ -1,0 +1,19 @@
+{
+    "name": "Geuneda.GameSystems.RedDot.Editor",
+    "rootNamespace": "Geuneda.GameSystems.RedDot.Editor",
+    "references": [
+        "Geuneda.GameSystems.RedDot",
+        "Geuneda.Services"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

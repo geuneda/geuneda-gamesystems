@@ -11,6 +11,7 @@ namespace Geuneda.GameSystems.RedDot
 	/// <remarks>
 	/// 이 컴포넌트는 계속 활성 상태인 오브젝트(버튼 등)에 두고, 표시 오브젝트는 그 아래 별도 자식으로 지정한다.
 	/// 자신이나 조상을 표시 오브젝트로 지정하면 값이 0일 때 자신이 꺼져 구독이 끊기므로, 그 지정은 무시하고 오류를 남긴다.
+	/// 활성 상태인 동안 <c>MainInstaller</c> 를 따라가므로, 서비스가 이 뷰보다 늦게 바인딩되거나 교체·정리되어도 다시 활성화할 필요가 없다.
 	/// </remarks>
 	public sealed class RedDotView : MonoBehaviour
 	{

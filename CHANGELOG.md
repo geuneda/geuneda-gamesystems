@@ -4,6 +4,22 @@
 이 형식은 [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)를 기반으로 하며,
 이 프로젝트는 [유의적 버전](http://semver.org/spec/v2.0.0.html)을 따릅니다.
 
+## [0.3.0] - 2026-10-14
+
+**호환되지 않는 변경**:
+- `IRedDotService` 에 `BeginBatch()` 가 추가되어, 이 인터페이스를 직접 구현한 클래스는 구현해야 합니다.
+- `com.geuneda.services` 의존성을 5.1.0 으로 올렸습니다(`MainInstaller.BindingChanged`).
+- `Paths` 가 사전 키 컬렉션 대신 읽기 전용 스냅샷을 돌려줍니다. 읽은 뒤의 노드 변경은 반영되지 않으므로 필요할 때 다시 읽습니다.
+
+**새 기능**:
+- 일괄 변경 `BeginBatch()`: `using` 범위 안의 변경을 모아, 범위가 끝날 때 바뀐 경로마다 최종 값으로 한 번만 알립니다. 할당 없는 struct(`RedDotBatch`), 중첩 가능, 두 번 Dispose 해도 안전합니다. `IRedDotService`를 직접 구현하면 `new RedDotBatch(종료 함수, 범위 ID)`로 자기 종료 처리를 연결합니다.
+- 늦은 바인딩과 서비스 교체: `RedDotBinding.Bind(path)`(와 `RedDotView`)가 `Unbind` 할 때까지 `MainInstaller` 를 따라갑니다. 서비스가 뷰보다 늦게 바인딩되거나 다른 인스턴스로 바뀌거나 지워져도 다시 활성화하지 않고 값이 맞춰집니다. 이전에는 다시 활성화할 때까지 0을 표시했습니다.
+- 에디터 디버그 창 `Tools > Geuneda > RedDot Debugger`(새 어셈블리 `Geuneda.GameSystems.RedDot.Editor`): 플레이 중 트리, 값, 뮤트, 구독자 수, 노드 없이 구독만 있는 경로, 열린 일괄 범위 수를 보여 줍니다.
+
+**수정**:
+- 콜백끼리 값을 계속 바꾸면 알림 처리가 끝나지 않아 게임이 멈추던 문제. 한 번의 처리에서 같은 경로를 100번 넘게 알리면 오류 로그를 남기고 그 처리에서는 그 경로를 건너뜁니다.
+- `Paths` 를 순회하는 중에 노드를 등록·제거하면 `InvalidOperationException` 이 나던 문제.
+
 ## [0.2.2] - 2026-10-13
 
 **변경**:

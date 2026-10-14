@@ -5,7 +5,7 @@
 ## 1. 패키지 개요
 - **패키지**: `com.geuneda.gamesystems`
 - **Unity**: 6000.3+
-- **의존성**: `com.geuneda.services` (2.1.0) — `RedDotBinding.Bind(path)`가 `MainInstaller`로 서비스를 찾습니다. 레드닷 asmdef는 `Geuneda.Services`만 참조합니다.
+- **의존성**: `com.geuneda.services` (5.1.0) — `RedDotBinding.Bind(path)`가 `MainInstaller`로 서비스를 찾고 `MainInstaller.BindingChanged`로 늦은 바인딩·교체를 따라갑니다. 레드닷 asmdef는 `Geuneda.Services`만 참조합니다.
 
 여러 게임 프로젝트에서 반복해서 구현하던 게임 시스템을 모은 패키지입니다.
 한 기능은 `Runtime/<Feature>/` 폴더 하나와 asmdef 하나로 구성합니다.
@@ -13,6 +13,7 @@
 ## 2. 구조 규칙 (새 기능을 추가할 때)
 
 - `Runtime/<Feature>/Geuneda.GameSystems.<Feature>.asmdef`, 네임스페이스 `Geuneda.GameSystems.<Feature>`.
+- 에디터 도구가 필요하면 `Editor/<Feature>/Geuneda.GameSystems.<Feature>.Editor.asmdef`(Editor 플랫폼만)에 둡니다. 런타임 내부를 읽어야 하면 런타임 asmdef의 `AssemblyInfo.cs`에 `InternalsVisibleTo`로 에디터 어셈블리를 엽니다. 디버그용 공개 API를 런타임에 늘리지 않습니다.
 - **기능 asmdef끼리 서로 참조하지 않습니다.** 의존은 `Geuneda.GameData`, `Geuneda.Services`까지만 허용합니다.
 - 게임 규칙, 경로 상수, 밸런스 수치는 넣지 않습니다. 게임마다 다른 부분은 훅(델리게이트, 이벤트, 인터페이스)으로 엽니다.
 - **geuneda 프레임워크 규칙(geuneda-frameworks `CLAUDE.md`)을 따릅니다.** 상속을 요구하는 기반 MonoBehaviour를 만들지 않습니다(2단계 이상 MonoBehaviour 상속 금지). 공개 MonoBehaviour는 `sealed`로 Unity 연결만 맡고, 로직은 POCO에 둡니다. 확장은 이벤트 구독이나 POCO 조합으로 엽니다.
@@ -25,11 +26,14 @@
 | 타입 | 공개 여부 | 역할 |
 |---|---|---|
 | `IRedDotService` | public | 서비스 계약 |
-| `RedDotService` | public | 경로 → 노드 사전, 경로 → 구독 사전, 알림 대기열과 Flush |
+| `RedDotService` | public | 경로 → 노드 사전, 경로 → 구독 사전, 알림 대기열과 Flush, 열린 일괄 범위 목록 |
+| `RedDotBatch` | public readonly struct | `BeginBatch()`가 돌려주는 범위. 종료 델리게이트와 범위 ID만 들고 Dispose 때 `end(id)`. 생성자가 공개라 `IRedDotService`를 직접 구현한 쪽도 자기 종료 처리를 연결함. `RedDotService`는 생성자에서 `_endBatch = EndBatch`를 한 번 만들어 범위마다 할당하지 않음 |
 | `RedDotNode` | internal | 트리 노드. 값과 변화량 전파, 바뀐 구독을 대기열에 넣음 |
 | `RedDotSubscription` | internal | 한 경로의 구독자 목록과 대기열 여부 |
 | `RedDotListener` | internal | 구독자 하나. 콜백, 이 구독자에게 마지막으로 전달한 값, 활성 여부 |
-| `RedDotBinding` | public | 경로 하나의 구독/해제/경로 교체를 처리하는 POCO. 바인딩마다 고유 델리게이트로 구독 |
+| `RedDotBinding` | public | 경로 하나의 구독/해제/경로 교체를 처리하는 POCO. 바인딩마다 고유 델리게이트로 구독. `Bind(path)`는 `Unbind`까지 `MainInstaller.BindingChanged`를 따라감 |
+| `RedDotDebuggerWindow` | internal (Editor) | `Tools > Geuneda > RedDot Debugger`. 플레이 중에만 `MainInstaller`의 `RedDotService`를 0.25초마다 `RedDotDebugSnapshot`으로 복사해 IMGUI로 그림. 접힘 상태는 경로로 기억 |
+| `RedDotDebugSnapshot` | internal (Editor) | 서비스 내부(`Nodes`, `Subscriptions`, `OpenBatchCount`, 노드의 `Muted`/`UnmutedValue`)를 읽어 만든 불변 사본. 이름 순 정렬, 노드 없는 구독 목록. 서비스 상태를 바꾸지 않음 |
 | `RedDotView` | public sealed | 프리팹용 컴포넌트. `RedDotBinding`으로 구독하고 표시 오브젝트 토글 + `ValueChanged` 이벤트. 이벤트는 일반 멀티캐스트 델리게이트로 저장하고(+=, -= 규칙 그대로) 등록/해제 때만 호출 목록 캐시를 갱신해 발행 시 할당이 없다. 발행마다 세대 번호를 올리고 호출 단위(합성 델리게이트도 펼침)로 호출 전마다 검사해, 중첩 `Apply`(핸들러 안 경로 변경)나 `OnDisable` 뒤에는 남은 핸들러에 옛 값을 보내지 않음. 핸들러별 try/catch. 자신/조상을 `_indicator`로 지정하면 무시(Awake 오류, OnValidate 경고) |
 
 ### 설계 불변식 (수정 시 깨지지 않게 유지)
@@ -42,6 +46,10 @@
 - **예외 격리**: 콜백마다 try/catch로 감싸 `Debug.LogException`으로 남기고, 같은 경로의 나머지 구독자와 다른 경로 알림을 계속합니다.
 - **구독은 경로 단위로 보관**: `RedDotService._subscriptions`에 경로로 저장하고 노드 생성 시 노드에 연결합니다. 등록 전 구독, 제거 후 재등록에도 구독이 유지됩니다. 제거된 경로는 0으로 조회되므로 Flush에서 0이 전달됩니다.
 - **리프 전환**: 리프에 자식이 생기면 리프 값을 0으로 버립니다. 마지막 자식이 사라져도 예전 리프 값이 되살아나지 않습니다.
+- **일괄 범위**: `BeginBatch`는 증가하는 ID를 `_openBatches`에 넣고, `EndBatch(id)`는 그 ID를 빼며(없으면 무시: 복사본의 두 번째 Dispose) 목록이 비면 `Flush`합니다. 범위는 순서와 관계없이 끝낼 수 있어 Dispose에서 예외를 던지지 않습니다. 깊이 카운터로 바꾸지 마세요(끝난 범위의 복사본이 새 범위를 끝내게 됨). 범위가 열려 있으면 `Flush`는 아무것도 하지 않고, Flush 도중 콜백이 범위를 열면 남은 구독은 대기열에 둔 채 멈춥니다(같은 경로의 남은 구독자도 그 구독을 다시 넣고 멈춤. 이미 알린 구독자는 `NotifiedValue`가 같아 다시 호출되지 않음). 그래서 `Flush`는 끝에 대기열을 비우지 않고 처리한 앞부분만 `RemoveRange`로 뺍니다.
+- **순환 상한**: Flush를 시작할 때 `_notificationCounts`(경로 → 이번 처리에서 알린 횟수)를 비우고 경로마다 셉니다. 구독자가 없는 구독(마지막 구독자가 해제돼 사전에서 빠졌지만 대기열에 남은 객체)은 세기 전에 건너뜁니다(`StaleSubscriptionsInQueue_DoNotUseUpLimit`). 구독 객체에 두지 마세요. 마지막 구독자가 해제되면 구독 객체를 지우고 재구독 때 새로 만들어, 콜백이 해제 후 재구독하며 값을 뒤집으면 횟수가 초기화되어 끝나지 않습니다(`CallbackResubscribingItself_LimitStillApplies`). `MaxNotificationsPerPath`(100)를 넘으면 처음 넘을 때 한 번 오류 로그를 남기고 그 처리에서는 그 경로를 건너뜁니다. 다른 경로 알림은 계속하고, 건너뛴 구독자는 다음 변경 때 현재 값을 받습니다.
+- **`Paths`**: 노드 키를 복사한 `ReadOnlyCollection` 스냅샷을 캐시하고, 노드를 만들거나 지울 때(`CreateNode`, `RemoveSubtree`, `Clear`) 무효화합니다. 사전의 `KeyCollection`을 그대로 내보내지 마세요(순회 중 등록하면 예외).
+- **바인딩의 MainInstaller 추적**: `RedDotBinding.Bind(path)`는 처음 한 번만 `MainInstaller.BindingChanged`에 등록하고 경로만 바꿀 때는 그대로 둡니다(리스트 셀). `Unbind`와 빈 경로 `Bind`만 해제합니다. 처리기는 `_followsInstaller`가 꺼져 있으면 무시합니다(진행 중인 알림의 스냅샷에 남은 처리기). 서비스가 바뀌면 이전 서비스 구독을 풀고 새 서비스를 구독한 뒤, 마지막으로 전달한 값과 다를 때만 전달합니다. `Bind(...)` 자체는 항상 현재 값을 전달합니다(기존 계약). `Bind(service, path)`는 `MainInstaller`를 따라가지 않습니다.
 
 ## 4. 테스트 실행
 

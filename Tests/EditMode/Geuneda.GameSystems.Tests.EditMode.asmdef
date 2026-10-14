@@ -4,7 +4,9 @@
     "references": [
         "UnityEngine.TestRunner",
         "UnityEditor.TestRunner",
-        "Geuneda.GameSystems.RedDot"
+        "Geuneda.Services",
+        "Geuneda.GameSystems.RedDot",
+        "Geuneda.GameSystems.RedDot.Editor"
     ],
     "includePlatforms": [
         "Editor"

@@ -5,7 +5,7 @@
 
 | 기능 | 어셈블리 | 네임스페이스 |
 |---|---|---|
-| 레드닷 | `Geuneda.GameSystems.RedDot` | `Geuneda.GameSystems.RedDot` |
+| 레드닷 | `Geuneda.GameSystems.RedDot` (에디터 디버그 창: `Geuneda.GameSystems.RedDot.Editor`) | `Geuneda.GameSystems.RedDot` |
 
 ## 설치
 
@@ -64,6 +64,7 @@ redDot.SetLeafValue(RedDotPaths.Lobby_Quest, claimableQuestCount);   // 숫자 �
 ```
 
 화면에서는 버튼 프리팹에 `RedDotView`를 붙이고, 인스펙터에서 `_nodePath`(예: `Lobby/Shop`)와 `_indicator`(켤 점 오브젝트)를 지정하면 끝입니다.
+뷰가 서비스보다 먼저 활성화돼도 됩니다. 서비스가 바인딩되는 순간 현재 값을 표시합니다.
 
 ## 핵심 개념
 
@@ -112,7 +113,7 @@ public sealed class RedDotCountLabel : MonoBehaviour
 
 **`RedDotBinding` 직접 사용 (자체 뷰가 있을 때)**
 
-구독 처리만 담은 POCO입니다. 자기 MonoBehaviour의 필드로 들고 생명주기에 맞춰 호출합니다. `Bind(path)`는 `MainInstaller`에서 `IRedDotService`를 찾고, 구독 직후 현재 값을 콜백으로 한 번 전달합니다.
+구독 처리만 담은 POCO입니다. 자기 MonoBehaviour의 필드로 들고 생명주기에 맞춰 호출합니다. `Bind(path)`는 `MainInstaller`에서 `IRedDotService`를 찾고, 구독 직후 현재 값을 콜백으로 한 번 전달합니다. 서비스가 없으면 0을 전달하고, `Unbind`할 때까지 `MainInstaller`를 따라가 서비스가 나중에 바인딩되거나 교체·정리되면 그에 맞춰 다시 구독하고 값을 전달합니다(값이 그대로면 다시 보내지 않음). 테스트처럼 서비스를 직접 넘기려면 `Bind(service, path)`를 씁니다. 이 경우 `MainInstaller`는 따라가지 않습니다.
 
 ```csharp
 using Geuneda.GameSystems.RedDot;
@@ -132,6 +133,27 @@ public sealed class ShopTabBadge : MonoBehaviour
 }
 ```
 
+### 일괄 변경
+
+리프 여러 개를 한꺼번에 바꿀 때(퀘스트 목록을 서버에서 받은 직후 등)는 `BeginBatch()`를 `using`으로 감쌉니다. 범위 안에서 값은 바로 바뀌지만(`GetValue`는 바뀐 값을 돌려줌) 알림은 범위가 끝날 때 경로마다 최종 값으로 한 번만 보냅니다. 범위 밖에서 리프 50개를 켜면 부모 구독자가 50번 호출되지만, 범위 안에서 켜면 한 번 호출됩니다. 범위 안에서 원래 값으로 돌아온 경로는 알리지 않습니다.
+
+```csharp
+using (redDot.BeginBatch())
+{
+	foreach (var quest in quests)
+	{
+		string path = RedDotPaths.QuestLeaf(quest.Id);
+		redDot.RegisterNode(path);
+		redDot.SetLeafValue(path, quest.IsClaimable ? 1 : 0);
+	}
+}
+```
+
+- 범위는 중첩할 수 있고 순서와 관계없이 끝내도 됩니다. 열린 범위가 모두 끝날 때 알립니다.
+- 반환값은 할당 없는 struct(`RedDotBatch`)입니다. 같은 범위를 두 번 Dispose 해도 두 번째는 무시합니다. `IRedDotService`를 직접 구현한다면 `new RedDotBatch(종료 함수, 범위 ID)`로 만들고, 종료 함수는 이미 끝난 ID를 무시해야 합니다.
+- 콜백 안에서 연 범위도 같은 규칙입니다. 그 범위가 끝날 때까지 남은 알림을 미룹니다.
+- 끝내지 않은 범위가 남으면 알림이 계속 미뤄지므로 항상 `using`으로 감쌉니다. 디버그 창이 열린 범위 수를 보여 줍니다.
+
 ### 뮤트
 
 콘텐츠가 잠겨서 배지를 해소할 방법이 없을 때는 값을 0으로 덮지 말고 노드를 뮤트합니다.
@@ -150,10 +172,20 @@ redDot.SetNodeMuted(RedDotPaths.Lobby_Season, !isSeasonOpen);
 - 콜백 안에서 다른 값을 바꿔도 됩니다. 변경은 즉시 반영되고 그 알림은 이어서 전달됩니다. 각 구독자가 마지막으로 받는 값은 항상 현재 값이며, 중간에 거친 값(예: 제거 후 즉시 재등록)은 생략될 수 있습니다.
 - 구독 콜백은 그 구독자가 마지막으로 받은 값과 달라졌을 때만 호출됩니다. 구독 시점의 값은 전달되지 않으므로 구독 직후 `GetValue`로 읽습니다(`RedDotBinding`이 이렇게 합니다).
 - 해제한 구독자는 진행 중인 알림 안에서도 다시 호출되지 않습니다. 콜백 예외는 로그로 남기고 나머지 구독자 알림은 계속합니다.
+- 콜백끼리 값을 계속 바꿔 한 번의 알림 처리에서 같은 경로를 100번 넘게 알리게 되면 순환으로 보고 오류 로그를 남긴 뒤 그 처리에서는 그 경로를 더 알리지 않습니다(게임이 멈추지 않게). 그 구독자는 다음에 값이 바뀔 때 현재 값을 받습니다.
 - 아직 등록하지 않은 경로도 구독할 수 있고, 등록되는 순간부터 알림을 받습니다.
 - `UnregisterNode`와 `Clear`는 값이 있던 노드의 구독자에게 0을 알리고, 구독은 유지합니다. 같은 경로를 다시 등록하면 이어서 알림을 받습니다.
-- `Paths`로 등록된 경로 전체를 볼 수 있습니다. 디버그 도구에서 트리를 나열할 때 씁니다.
-- `RedDotView`/`RedDotBinding.Bind(path)`는 `MainInstaller`에 서비스가 바인딩된 뒤에 호출돼야 합니다. 서비스가 없으면 구독하지 않고 0을 표시합니다.
+- `Paths`로 등록된 경로 전체를 볼 수 있습니다. 읽는 시점의 읽기 전용 스냅샷이라 순회 중에 노드를 등록·제거해도 됩니다. 트리가 바뀌지 않았으면 같은 인스턴스를 돌려줍니다.
+- `RedDotView`/`RedDotBinding.Bind(path)`는 `MainInstaller`에 서비스가 없으면 0을 표시하고, 서비스가 바인딩되면 그때 구독합니다. 서비스를 다른 인스턴스로 바꾸거나(`Clean` 후 다시 `Bind`) 지우면(`Clean`) 새 서비스의 값이나 0으로 바뀝니다. 부트스트랩이 `OnDestroy`에서 `MainInstaller.Clean()`을 부르면 아직 켜진 뷰는 0을 받습니다.
+
+### 디버그 창
+
+`Tools > Geuneda > RedDot Debugger`를 열면 플레이 중 `MainInstaller`의 `RedDotService` 트리를 0.25초마다 보여 줍니다.
+
+- 노드마다 값, 뮤트 여부와 뮤트 전 값, 구독자 수를 표시합니다.
+- 노드 없이 구독만 있는 경로를 따로 나열합니다. 경로 오타로 배지가 안 뜰 때 여기서 찾습니다.
+- 열린 일괄 범위가 있으면 경고합니다.
+- 플레이 모드가 아니면 아무것도 읽지 않습니다. `IRedDotService`를 직접 구현한 서비스는 트리를 읽을 수 없어 안내만 표시합니다.
 
 ## 상세 문서
 
@@ -163,7 +195,7 @@ redDot.SetNodeMuted(RedDotPaths.Lobby_Season, !isSeasonOpen);
 ## 요구 사항과 의존성
 
 - Unity 6000.3 이상
-- `com.geuneda.services` 2.1.0 (core, gamedata, UniTask, Addressables를 함께 끌어옵니다)
+- `com.geuneda.services` 5.1.0 이상 (core, gamedata, UniTask, Addressables를 함께 끌어옵니다. `MainInstaller.BindingChanged`를 씁니다)
 - 기능끼리는 서로 참조하지 않으며, 기능 어셈블리는 `Geuneda.GameData`, `Geuneda.Services`에만 의존할 수 있습니다. 레드닷은 `Geuneda.Services`만 참조합니다.
 
 ## 라이선스
