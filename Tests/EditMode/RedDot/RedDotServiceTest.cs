@@ -366,6 +366,7 @@ namespace GeunedaEditor.GameSystems.Tests
 			var childReceived = new List<int>();
 			_service.Subscribe("A/B", childReceived.Add);
 
+			LogAssert.Expect(LogType.Error, new Regex(@"\[Geuneda\.GameSystems\.RedDot\] 'A' 구독 콜백에서 예외가 났다"));
 			LogAssert.Expect(LogType.Exception, new Regex("view error"));
 			_service.SetLeafValue("A/B", 1);
 
@@ -380,6 +381,7 @@ namespace GeunedaEditor.GameSystems.Tests
 			var received = new List<int>();
 			_service.Subscribe("A", received.Add);
 
+			LogAssert.Expect(LogType.Error, new Regex(@"\[Geuneda\.GameSystems\.RedDot\] 'A' 구독 콜백에서 예외가 났다"));
 			LogAssert.Expect(LogType.Exception, new Regex("view error"));
 			_service.SetLeafValue("A", 1);
 

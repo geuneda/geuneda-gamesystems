@@ -1,4 +1,5 @@
 using System;
+using Geuneda.Core;
 using UnityEngine;
 
 namespace Geuneda.GameSystems.RedDot
@@ -15,6 +16,8 @@ namespace Geuneda.GameSystems.RedDot
 	/// </remarks>
 	public sealed class RedDotView : MonoBehaviour
 	{
+		private static readonly ModuleLogger Logger = new ModuleLogger("Geuneda.GameSystems.RedDot.View");
+
 		[SerializeField] private string _nodePath;
 		[Tooltip("값이 1 이상일 때 켤 자식 오브젝트. 이 컴포넌트가 붙은 오브젝트나 그 조상은 지정할 수 없다. 비워 두면 켜고 끄지 않고 ValueChanged 만 발생한다.")]
 		[SerializeField] private GameObject _indicator;
@@ -80,7 +83,7 @@ namespace Geuneda.GameSystems.RedDot
 		{
 			if (IndicatorContainsSelf())
 			{
-				Debug.LogError($"[RedDot] {name}: 표시 오브젝트로 자신이나 조상을 지정할 수 없어 무시한다. 별도 자식 오브젝트를 지정해야 한다.", this);
+				Logger.Error($"{name}: 표시 오브젝트로 자신이나 조상을 지정할 수 없어 무시한다. 별도 자식 오브젝트를 지정해야 한다.", this);
 			}
 
 			_binding = new RedDotBinding(Apply);
@@ -102,7 +105,7 @@ namespace Geuneda.GameSystems.RedDot
 		{
 			if (IndicatorContainsSelf())
 			{
-				Debug.LogWarning($"[RedDot] {name}: 표시 오브젝트로 자신이나 조상을 지정할 수 없다. 별도 자식 오브젝트를 지정해야 한다.", this);
+				Logger.Warning($"{name}: 표시 오브젝트로 자신이나 조상을 지정할 수 없다. 별도 자식 오브젝트를 지정해야 한다.", this);
 			}
 		}
 
@@ -145,7 +148,8 @@ namespace Geuneda.GameSystems.RedDot
 				catch (Exception exception)
 				{
 					// 추가 표시 하나의 오류가 다른 표시의 갱신까지 막지 않도록 기록만 하고 이어서 호출한다.
-					Debug.LogException(exception, this);
+					// 처리기가 이 뷰를 파괴했을 수 있어 name 을 읽지 않는다(파괴된 객체의 name 은 예외를 던진다). 뷰는 컨텍스트로 넘긴다.
+					Logger.Error(exception, $"{nameof(ValueChanged)} 처리기에서 예외가 났다.", this);
 				}
 			}
 		}

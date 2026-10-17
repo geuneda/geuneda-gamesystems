@@ -5,7 +5,7 @@
 ## 1. 패키지 개요
 - **패키지**: `com.geuneda.gamesystems`
 - **Unity**: 6000.3+
-- **의존성**: `com.geuneda.services` (5.1.0) — `RedDotBinding.Bind(path)`가 `MainInstaller`로 서비스를 찾고 `MainInstaller.BindingChanged`로 늦은 바인딩·교체를 따라갑니다. 레드닷 asmdef는 `Geuneda.Services`만 참조합니다.
+- **의존성**: `com.geuneda.services` (5.1.0) — `RedDotBinding.Bind(path)`가 `MainInstaller`로 서비스를 찾고 `MainInstaller.BindingChanged`로 늦은 바인딩·교체를 따라갑니다. 레드닷 asmdef는 `Geuneda.Core`(로거 `ModuleLogger`)와 `Geuneda.Services`를 참조합니다.
 
 여러 게임 프로젝트에서 반복해서 구현하던 게임 시스템을 모은 패키지입니다.
 한 기능은 `Runtime/<Feature>/` 폴더 하나와 asmdef 하나로 구성합니다.
@@ -14,7 +14,7 @@
 
 - `Runtime/<Feature>/Geuneda.GameSystems.<Feature>.asmdef`, 네임스페이스 `Geuneda.GameSystems.<Feature>`.
 - 에디터 도구가 필요하면 `Editor/<Feature>/Geuneda.GameSystems.<Feature>.Editor.asmdef`(Editor 플랫폼만)에 둡니다. 런타임 내부를 읽어야 하면 런타임 asmdef의 `AssemblyInfo.cs`에 `InternalsVisibleTo`로 에디터 어셈블리를 엽니다. 디버그용 공개 API를 런타임에 늘리지 않습니다.
-- **기능 asmdef끼리 서로 참조하지 않습니다.** 의존은 `Geuneda.GameData`, `Geuneda.Services`까지만 허용합니다.
+- **기능 asmdef끼리 서로 참조하지 않습니다.** 의존은 `Geuneda.Core`, `Geuneda.GameData`, `Geuneda.Services`까지만 허용합니다.
 - 게임 규칙, 경로 상수, 밸런스 수치는 넣지 않습니다. 게임마다 다른 부분은 훅(델리게이트, 이벤트, 인터페이스)으로 엽니다.
 - **geuneda 프레임워크 규칙(geuneda-frameworks `CLAUDE.md`)을 따릅니다.** 상속을 요구하는 기반 MonoBehaviour를 만들지 않습니다(2단계 이상 MonoBehaviour 상속 금지). 공개 MonoBehaviour는 `sealed`로 Unity 연결만 맡고, 로직은 POCO에 둡니다. 확장은 이벤트 구독이나 POCO 조합으로 엽니다.
 - 테스트: 순수 로직은 `Tests/EditMode/<Feature>/`, MonoBehaviour 생명주기는 `Tests/PlayMode/<Feature>/`.
@@ -43,7 +43,7 @@
 - **Flush 규칙**: 대기열의 구독을 차례로 처리합니다. 콜백 안의 변경은 즉시 반영되고 해당 구독이 대기열 뒤에 다시 붙어 같은 Flush에서 처리됩니다(처리 직전 `Queued = false`, `_flushing`으로 중첩 Flush 방지).
 - **구독자 단위 상태**: "마지막으로 전달한 값"은 경로가 아니라 `RedDotListener`마다 따로 둡니다. 구독자마다 호출 직전에 현재 값을 다시 읽고 자기 `NotifiedValue`와 다를 때만 호출합니다. 그래서 같은 경로 구독자들이 한 알림 안에서 값을 바꾸거나, 알림 도중 새로 구독해도 각 구독자가 마지막으로 받는 값은 항상 현재 값입니다. 새 구독자의 기준값은 구독 시점의 `GetValue`입니다(구독자는 구독 직후 직접 읽는다는 계약).
 - **스냅샷 순회와 해제**: 구독자 목록은 `ArrayPool` 스냅샷으로 순회합니다(스냅샷 배열을 재사용해 반복 알림의 할당을 줄임. 풀에 맞는 배열이 없을 때는 할당될 수 있음). 해제 시 `Active = false`로 표시하고 목록에서 즉시 빼므로, 해제된 구독자는 진행 중인 알림 안에서도 다시 호출되지 않습니다. 뷰가 전달값을 그대로 써도 되는 근거입니다.
-- **예외 격리**: 콜백마다 try/catch로 감싸 `Debug.LogException`으로 남기고, 같은 경로의 나머지 구독자와 다른 경로 알림을 계속합니다.
+- **예외 격리**: 콜백마다 try/catch로 감싸 `ModuleLogger`(`Geuneda.GameSystems.RedDot`)로 Error 줄과 예외를 남기고, 같은 경로의 나머지 구독자와 다른 경로 알림을 계속합니다.
 - **구독은 경로 단위로 보관**: `RedDotService._subscriptions`에 경로로 저장하고 노드 생성 시 노드에 연결합니다. 등록 전 구독, 제거 후 재등록에도 구독이 유지됩니다. 제거된 경로는 0으로 조회되므로 Flush에서 0이 전달됩니다.
 - **리프 전환**: 리프에 자식이 생기면 리프 값을 0으로 버립니다. 마지막 자식이 사라져도 예전 리프 값이 되살아나지 않습니다.
 - **일괄 범위**: `BeginBatch`는 증가하는 ID를 `_openBatches`에 넣고, `EndBatch(id)`는 그 ID를 빼며(없으면 무시: 복사본의 두 번째 Dispose) 목록이 비면 `Flush`합니다. 범위는 순서와 관계없이 끝낼 수 있어 Dispose에서 예외를 던지지 않습니다. 깊이 카운터로 바꾸지 마세요(끝난 범위의 복사본이 새 범위를 끝내게 됨). 범위가 열려 있으면 `Flush`는 아무것도 하지 않고, Flush 도중 콜백이 범위를 열면 남은 구독은 대기열에 둔 채 멈춥니다(같은 경로의 남은 구독자도 그 구독을 다시 넣고 멈춤. 이미 알린 구독자는 `NotifiedValue`가 같아 다시 호출되지 않음). 그래서 `Flush`는 끝에 대기열을 비우지 않고 처리한 앞부분만 `RemoveRange`로 뺍니다.

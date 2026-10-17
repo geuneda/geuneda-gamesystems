@@ -179,9 +179,11 @@ namespace Geuneda.GameSystems.Tests
 			var later = new List<int>();
 			_view.ValueChanged += later.Add;
 
+			LogAssert.Expect(LogType.Error, new Regex(@"\[Geuneda\.GameSystems\.RedDot\.View\] ValueChanged 처리기에서 예외가 났다"));
 			LogAssert.Expect(LogType.Exception, new Regex("badge error"));
 			_gameObject.SetActive(true);
 
+			LogAssert.Expect(LogType.Error, new Regex(@"\[Geuneda\.GameSystems\.RedDot\.View\] ValueChanged 처리기에서 예외가 났다"));
 			LogAssert.Expect(LogType.Exception, new Regex("badge error"));
 			_service.SetLeafValue("A", 3);
 
@@ -217,10 +219,35 @@ namespace Geuneda.GameSystems.Tests
 			Action<int> record = later.Add;
 			_view.ValueChanged += throwing + record;
 
+			LogAssert.Expect(LogType.Error, new Regex(@"\[Geuneda\.GameSystems\.RedDot\.View\] ValueChanged 처리기에서 예외가 났다"));
 			LogAssert.Expect(LogType.Exception, new Regex("badge error"));
 			_gameObject.SetActive(true);
 
 			CollectionAssert.AreEqual(new[] { 0 }, later);
+		}
+
+		[Test]
+		public void ValueChangedHandler_DestroyingViewThenThrowing_LogsOriginalException()
+		{
+			_service.SetLeafValue("B", 4);
+			_gameObject.SetActive(true);
+			var later = new List<int>();
+			_view.ValueChanged += value =>
+			{
+				if (value == 4)
+				{
+					Object.DestroyImmediate(_view);
+					throw new InvalidOperationException("destroyed then failed");
+				}
+			};
+			_view.ValueChanged += later.Add;
+
+			LogAssert.Expect(LogType.Error, new Regex(@"\[Geuneda\.GameSystems\.RedDot\.View\] ValueChanged 처리기에서 예외가 났다"));
+			LogAssert.Expect(LogType.Exception, new Regex("destroyed then failed"));
+			// 처리기가 뷰를 파괴해도 원래 예외를 기록하고, 호출자에게 다른 예외가 전파되지 않아야 한다
+			Assert.DoesNotThrow(() => _view.SetNodePath("B"));
+
+			CollectionAssert.DoesNotContain(later, 4, "파괴된 뒤 남은 처리기는 부르지 않는다");
 		}
 
 		[Test]

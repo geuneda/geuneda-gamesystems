@@ -2,7 +2,7 @@ using System;
 using System.Buffers;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
-using UnityEngine;
+using Geuneda.Core;
 
 namespace Geuneda.GameSystems.RedDot
 {
@@ -14,6 +14,8 @@ namespace Geuneda.GameSystems.RedDot
 
 		/// <summary> 한 번의 알림 처리에서 경로 하나를 알릴 수 있는 최대 횟수. 넘으면 콜백이 값을 계속 바꾸는 순환으로 본다. </summary>
 		internal const int MaxNotificationsPerPath = 100;
+
+		private static readonly ModuleLogger Logger = new ModuleLogger("Geuneda.GameSystems.RedDot");
 
 		private readonly Dictionary<string, RedDotNode> _nodes = new Dictionary<string, RedDotNode>();
 		private readonly Dictionary<string, RedDotSubscription> _subscriptions = new Dictionary<string, RedDotSubscription>();
@@ -99,13 +101,13 @@ namespace Geuneda.GameSystems.RedDot
 		{
 			if (!_nodes.TryGetValue(path, out var node))
 			{
-				Debug.LogWarning($"[RedDot] 등록되지 않은 노드에 값 설정 시도: {path}");
+				Logger.Warning($"등록되지 않은 노드에 값 설정 시도: {path}");
 				return;
 			}
 
 			if (!node.SetLeafValue(value))
 			{
-				Debug.LogWarning($"[RedDot] 리프가 아닌 노드에는 값을 설정할 수 없다 (자식 합으로 계산됨): {path}");
+				Logger.Warning($"리프가 아닌 노드에는 값을 설정할 수 없다 (자식 합으로 계산됨): {path}");
 				return;
 			}
 
@@ -117,7 +119,7 @@ namespace Geuneda.GameSystems.RedDot
 		{
 			if (!_nodes.TryGetValue(path, out var node))
 			{
-				Debug.LogWarning($"[RedDot] 등록되지 않은 노드에 뮤트 시도: {path}");
+				Logger.Warning($"등록되지 않은 노드에 뮤트 시도: {path}");
 				return;
 			}
 
@@ -288,7 +290,7 @@ namespace Geuneda.GameSystems.RedDot
 						// 콜백끼리 값을 계속 바꾸면 이 루프가 끝나지 않아 게임이 멈춘다. 이 경로는 이번 처리에서 그만 알린다.
 						if (count == MaxNotificationsPerPath + 1)
 						{
-							Debug.LogError($"[RedDot] '{subscription.Path}' 알림이 한 번의 처리에서 {MaxNotificationsPerPath}번을 넘었다. 콜백이 값을 계속 바꾸는 순환으로 보고 이번 처리에서는 더 알리지 않는다.");
+							Logger.Error($"'{subscription.Path}' 알림이 한 번의 처리에서 {MaxNotificationsPerPath}번을 넘었다. 콜백이 값을 계속 바꾸는 순환으로 보고 이번 처리에서는 더 알리지 않는다.");
 						}
 
 						continue;
@@ -355,7 +357,7 @@ namespace Geuneda.GameSystems.RedDot
 					catch (Exception exception)
 					{
 						// 한 화면의 오류가 다른 구독자의 배지 갱신까지 막지 않도록 기록만 하고 이어서 알린다.
-						Debug.LogException(exception);
+						Logger.Error(exception, $"'{subscription.Path}' 구독 콜백에서 예외가 났다.");
 					}
 				}
 			}

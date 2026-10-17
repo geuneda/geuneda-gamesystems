@@ -4,6 +4,12 @@
 이 형식은 [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)를 기반으로 하며,
 이 프로젝트는 [유의적 버전](http://semver.org/spec/v2.0.0.html)을 따릅니다.
 
+## [0.3.1] - 2026-10-17
+
+**변경**:
+- 레드닷 로그를 core 의 `ModuleLogger` 로 옮겼습니다. 메시지 앞의 `[RedDot]` 대신 `[Geuneda.GameSystems.RedDot]`(`RedDotService`), `[Geuneda.GameSystems.RedDot.View]`(`RedDotView`)가 붙습니다. 레드닷 asmdef 가 `Geuneda.Core` 를 직접 참조하고 `package.json` 에 `com.geuneda.core` 0.4.0 을 적었습니다(services 가 이미 의존하므로 설치는 그대로입니다).
+- 예외만 남기던 곳은 무엇이 실패했는지 적은 Error 줄을 먼저 남기고 예외를 남깁니다. `LogAssert.Expect(LogType.Exception, ...)` 로 이 로그를 기대하던 테스트는 그 앞에 `LogType.Error` 기대를 추가해야 합니다. 해당 위치: `RedDotService` 구독 콜백 예외, `RedDotView.ValueChanged` 처리기 예외(뷰는 로그 컨텍스트로 넘기고, 처리기가 뷰를 파괴했을 수 있어 메시지에 오브젝트 이름은 넣지 않습니다).
+
 ## [0.3.0] - 2026-10-14
 
 **호환되지 않는 변경**:

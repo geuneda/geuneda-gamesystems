@@ -2,6 +2,7 @@
     "name": "Geuneda.GameSystems.RedDot",
     "rootNamespace": "Geuneda.GameSystems.RedDot",
     "references": [
+        "Geuneda.Core",
         "Geuneda.Services"
     ],
     "includePlatforms": [],
