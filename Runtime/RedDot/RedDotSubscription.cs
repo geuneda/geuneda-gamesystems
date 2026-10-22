@@ -37,19 +37,24 @@ namespace Geuneda.GameSystems.RedDot
 		}
 	}
 
-	/// <summary> 구독 하나. 구독자마다 마지막으로 전달한 값을 따로 기억한다. </summary>
+	/// <summary> 구독 하나. 구독자마다 받는 종류와 마지막으로 전달한 값을 따로 기억한다. </summary>
 	internal sealed class RedDotListener
 	{
 		/// <param name="callback">값을 받을 콜백</param>
+		/// <param name="kind">받을 종류. <see cref="RedDotService.AllKinds"/> 면 모든 종류의 합</param>
 		/// <param name="notifiedValue">구독 시점의 값. 이 값과 달라질 때부터 알린다.</param>
-		public RedDotListener(Action<int> callback, int notifiedValue)
+		public RedDotListener(Action<int> callback, int kind, int notifiedValue)
 		{
 			Callback = callback;
+			Kind = kind;
 			NotifiedValue = notifiedValue;
 		}
 
 		/// <summary> 값을 받을 콜백 </summary>
 		public Action<int> Callback { get; }
+
+		/// <summary> 받을 종류. <see cref="RedDotService.AllKinds"/> 면 모든 종류의 합 </summary>
+		public int Kind { get; }
 
 		/// <summary> 이 구독자에게 마지막으로 전달한 값 </summary>
 		public int NotifiedValue { get; set; }

@@ -8,6 +8,7 @@ namespace Geuneda.GameSystems.RedDot
 	/// 프리팹에 붙여 쓰는 레드닷 표시 컴포넌트. 인스펙터에서 경로와 켤 오브젝트를 지정한다.
 	/// 값이 1 이상이면 표시 오브젝트를 켜고, 0이면 끈다.
 	/// 숫자 배지나 애니메이션 같은 추가 표시는 상속하지 않고, 다른 컴포넌트가 <see cref="ValueChanged"/> 를 구독해 붙인다.
+	/// 종류(<see cref="Kind"/>)를 지정하면 그 종류의 값만 본다. 종류마다 다른 표시 중 하나만 켜려면 종류별 뷰를 <see cref="RedDotPriorityGroup"/> 으로 묶는다.
 	/// </summary>
 	/// <remarks>
 	/// 이 컴포넌트는 계속 활성 상태인 오브젝트(버튼 등)에 두고, 표시 오브젝트는 그 아래 별도 자식으로 지정한다.
@@ -19,6 +20,8 @@ namespace Geuneda.GameSystems.RedDot
 		private static readonly ModuleLogger Logger = new ModuleLogger("Geuneda.GameSystems.RedDot.View");
 
 		[SerializeField] private string _nodePath;
+		[Tooltip("볼 배지 종류. -1 이면 모든 종류의 합이다. 서비스의 종류 수보다 작아야 한다.")]
+		[SerializeField] private int _kind = RedDotService.AllKinds;
 		[Tooltip("값이 1 이상일 때 켤 자식 오브젝트. 이 컴포넌트가 붙은 오브젝트나 그 조상은 지정할 수 없다. 비워 두면 켜고 끄지 않고 ValueChanged 만 발생한다.")]
 		[SerializeField] private GameObject _indicator;
 
@@ -50,6 +53,12 @@ namespace Geuneda.GameSystems.RedDot
 
 		/// <summary> 현재 노드 경로 </summary>
 		public string NodePath => _nodePath;
+
+		/// <summary> 보는 배지 종류. <see cref="RedDotService.AllKinds"/> 면 모든 종류의 합이다. </summary>
+		public int Kind => _kind;
+
+		/// <summary> 인스펙터에서 지정한 표시 오브젝트. <see cref="RedDotPriorityGroup"/> 이 겹친 지정을 경고할 때 읽는다. </summary>
+		internal GameObject Indicator => _indicator;
 
 		/// <summary> 마지막으로 표시한 값. <see cref="ValueChanged"/> 를 늦게 구독한 쪽이 현재 상태를 읽을 때 쓴다. </summary>
 		public int Value { get; private set; }
@@ -86,7 +95,13 @@ namespace Geuneda.GameSystems.RedDot
 				Logger.Error($"{name}: 표시 오브젝트로 자신이나 조상을 지정할 수 없어 무시한다. 별도 자식 오브젝트를 지정해야 한다.", this);
 			}
 
-			_binding = new RedDotBinding(Apply);
+			if (_kind < RedDotService.AllKinds)
+			{
+				Logger.Error($"{name}: 종류 {_kind} 는 쓸 수 없어 모든 종류({RedDotService.AllKinds})로 본다.", this);
+				_kind = RedDotService.AllKinds;
+			}
+
+			_binding = new RedDotBinding(Apply, _kind);
 		}
 
 		private void OnEnable()
@@ -106,6 +121,11 @@ namespace Geuneda.GameSystems.RedDot
 			if (IndicatorContainsSelf())
 			{
 				Logger.Warning($"{name}: 표시 오브젝트로 자신이나 조상을 지정할 수 없다. 별도 자식 오브젝트를 지정해야 한다.", this);
+			}
+
+			if (_kind < RedDotService.AllKinds)
+			{
+				Logger.Warning($"{name}: 종류는 {RedDotService.AllKinds}(모든 종류) 이상이어야 한다.", this);
 			}
 		}
 

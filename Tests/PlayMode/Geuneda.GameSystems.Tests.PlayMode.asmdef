@@ -4,7 +4,8 @@
     "references": [
         "UnityEngine.TestRunner",
         "Geuneda.Services",
-        "Geuneda.GameSystems.RedDot"
+        "Geuneda.GameSystems.RedDot",
+        "Geuneda.GameSystems.FeatureUnlock"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

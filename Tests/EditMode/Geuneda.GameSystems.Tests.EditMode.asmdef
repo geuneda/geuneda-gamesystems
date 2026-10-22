@@ -6,7 +6,8 @@
         "UnityEditor.TestRunner",
         "Geuneda.Services",
         "Geuneda.GameSystems.RedDot",
-        "Geuneda.GameSystems.RedDot.Editor"
+        "Geuneda.GameSystems.RedDot.Editor",
+        "Geuneda.GameSystems.FeatureUnlock"
     ],
     "includePlatforms": [
         "Editor"

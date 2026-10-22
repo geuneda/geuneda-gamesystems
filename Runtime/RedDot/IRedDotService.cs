@@ -16,6 +16,12 @@ namespace Geuneda.GameSystems.RedDot
 	/// 콜백에서 던진 예외는 로그로 남기고 나머지 구독자 알림은 계속한다.
 	/// 한 번의 알림 처리에서 같은 경로를 100번 넘게 알리게 되면(콜백이 값을 계속 바꾸는 순환) 오류를 남기고
 	/// 그 처리에서는 그 경로를 더 알리지 않는다. 그 구독자는 다음에 값이 바뀔 때 현재 값을 받는다.
+	/// <para>
+	/// 배지 종류: 서비스를 만들 때 종류 수(<see cref="KindCount"/>)를 정하면, 리프마다 종류를 하나 두고 부모는 종류마다 따로 합한다.
+	/// 예를 들어 0 = 빨간 점, 1 = 새 항목, 2 = 강화 가능으로 두면 부모 버튼은 "빨간 점이 있으면 빨간 점, 없으면 새 항목"처럼 고를 수 있다.
+	/// 종류를 받지 않는 메서드는 모든 종류의 합을 다루며, 종류가 하나뿐이면 종류를 쓰지 않을 때와 같다.
+	/// 종류 번호의 뜻과 표시 우선순위는 게임이 정한다.
+	/// </para>
 	/// </remarks>
 	public interface IRedDotService
 	{
@@ -25,10 +31,23 @@ namespace Geuneda.GameSystems.RedDot
 		/// </summary>
 		IReadOnlyCollection<string> Paths { get; }
 
-		/// <summary> 경로에 노드를 등록한다. 없는 조상 노드는 자동으로 만든다. 이미 있으면 아무것도 하지 않는다. </summary>
+		/// <summary> 배지 종류 수. 1이면 종류를 나누지 않는다. 종류는 0 부터 이 값 미만이다. </summary>
+		int KindCount { get; }
+
+		/// <summary> 경로에 노드를 등록한다. 없는 조상 노드는 자동으로 만든다. 새 노드의 종류는 0이다. 이미 있으면 아무것도 하지 않는다(종류도 그대로). </summary>
 		/// <param name="path">등록할 노드 경로</param>
 		/// <exception cref="ArgumentException">경로가 비었거나, '/' 로 시작·끝나거나, 빈 구간("A//B")이 있을 때</exception>
 		void RegisterNode(string path);
+
+		/// <summary>
+		/// 경로에 노드를 등록하고, 리프일 때 값이 들어갈 종류를 정한다. 없는 조상 노드는 종류 0으로 자동으로 만든다.
+		/// 이미 있으면 종류만 바꾼다. 값이 있는 리프면 값이 새 종류로 옮겨 가고 전체 값은 그대로다.
+		/// </summary>
+		/// <param name="path">등록할 노드 경로</param>
+		/// <param name="kind">0 이상 <see cref="KindCount"/> 미만의 종류</param>
+		/// <exception cref="ArgumentException">경로가 비었거나, '/' 로 시작·끝나거나, 빈 구간("A//B")이 있을 때</exception>
+		/// <exception cref="ArgumentOutOfRangeException">종류가 범위 밖일 때</exception>
+		void RegisterNode(string path, int kind);
 
 		/// <summary>
 		/// 노드와 모든 하위 노드를 제거한다. 값이 있던 노드의 구독자에게는 0을 알린다.
@@ -37,7 +56,7 @@ namespace Geuneda.GameSystems.RedDot
 		/// <param name="path">제거할 노드 경로</param>
 		void UnregisterNode(string path);
 
-		/// <summary> 리프 노드의 값을 설정한다. 0이면 꺼짐, 1 이상이면 켜짐. 음수는 0으로 보정한다. </summary>
+		/// <summary> 리프 노드의 값을 설정한다. 0이면 꺼짐, 1 이상이면 켜짐. 음수는 0으로 보정한다. 값은 리프의 종류에 들어간다. </summary>
 		/// <param name="path">대상 리프 노드 경로</param>
 		/// <param name="value">설정할 값</param>
 		void SetLeafValue(string path, int value);
@@ -52,7 +71,7 @@ namespace Geuneda.GameSystems.RedDot
 		void SetNodeMuted(string path, bool muted);
 
 		/// <summary>
-		/// 노드의 현재 값을 조회한다. 부모 노드는 자식 합을, 없는 경로는 0을 반환한다.
+		/// 노드의 현재 값(모든 종류의 합)을 조회한다. 부모 노드는 자식 합을, 없는 경로는 0을 반환한다.
 		/// 자식 합이 int 범위를 넘으면 <see cref="int.MaxValue"/> 를 반환한다.
 		/// </summary>
 		/// <param name="path">조회할 노드 경로</param>
@@ -60,7 +79,17 @@ namespace Geuneda.GameSystems.RedDot
 		int GetValue(string path);
 
 		/// <summary>
-		/// 경로의 값 변경을 구독한다. 이 구독자에게 마지막으로 전달한 값과 달라졌을 때만 호출된다.
+		/// 노드의 한 종류 값을 조회한다. 부모 노드는 그 종류 자식 값의 합을, 없는 경로는 0을 반환한다.
+		/// 뮤트된 노드는 모든 종류가 0이다.
+		/// </summary>
+		/// <param name="path">조회할 노드 경로</param>
+		/// <param name="kind">0 이상 <see cref="KindCount"/> 미만의 종류. <see cref="RedDotService.AllKinds"/> 면 <see cref="GetValue(string)"/> 와 같다.</param>
+		/// <returns>그 종류의 현재 값</returns>
+		/// <exception cref="ArgumentOutOfRangeException">종류가 범위 밖일 때</exception>
+		int GetValue(string path, int kind);
+
+		/// <summary>
+		/// 경로의 값(모든 종류의 합) 변경을 구독한다. 이 구독자에게 마지막으로 전달한 값과 달라졌을 때만 호출된다.
 		/// 아직 등록되지 않은 경로도 구독할 수 있으며, 등록되는 시점부터 알림을 받는다.
 		/// 구독 시점의 현재 값은 전달하지 않으므로 필요하면 <see cref="GetValue"/> 로 읽는다.
 		/// 같은 콜백을 여러 번 구독하면 그만큼 호출되고, <see cref="Unsubscribe"/> 는 마지막에 추가한 하나를 해제한다.
@@ -69,10 +98,26 @@ namespace Geuneda.GameSystems.RedDot
 		/// <param name="callback">바뀐 값을 받는 콜백</param>
 		void Subscribe(string path, Action<int> callback);
 
-		/// <summary> 경로의 값 변경 구독을 해제한다 </summary>
+		/// <summary> 경로의 값(모든 종류의 합) 변경 구독을 해제한다 </summary>
 		/// <param name="path">구독 해제할 노드 경로</param>
 		/// <param name="callback">해제할 콜백</param>
 		void Unsubscribe(string path, Action<int> callback);
+
+		/// <summary>
+		/// 경로의 한 종류 값 변경을 구독한다. 그 종류의 값이 이 구독자에게 마지막으로 전달한 값과 달라졌을 때만 호출된다.
+		/// 그 밖의 규칙은 <see cref="Subscribe(string, Action{int})"/> 와 같다.
+		/// </summary>
+		/// <param name="path">구독할 노드 경로</param>
+		/// <param name="kind">0 이상 <see cref="KindCount"/> 미만의 종류. <see cref="RedDotService.AllKinds"/> 면 모든 종류의 합</param>
+		/// <param name="callback">바뀐 값을 받는 콜백</param>
+		/// <exception cref="ArgumentOutOfRangeException">종류가 범위 밖일 때</exception>
+		void Subscribe(string path, int kind, Action<int> callback);
+
+		/// <summary> 경로의 한 종류 값 변경 구독을 해제한다. 같은 종류로 구독한 콜백만 해제한다. </summary>
+		/// <param name="path">구독 해제할 노드 경로</param>
+		/// <param name="kind">구독할 때 넘긴 종류</param>
+		/// <param name="callback">해제할 콜백</param>
+		void Unsubscribe(string path, int kind, Action<int> callback);
 
 		/// <summary>
 		/// 모든 노드를 제거한다. 값이 있던 노드의 구독자에게는 0을 알린다.

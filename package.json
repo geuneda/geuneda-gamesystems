@@ -2,10 +2,10 @@
   "name": "com.geuneda.gamesystems",
   "displayName": "Geuneda Game Systems",
   "author": "geuneda",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "unity": "6000.3",
   "license": "MIT",
-  "description": "여러 게임에서 반복해서 만드는 게임 시스템을 모아 둔 패키지입니다. 기능마다 어셈블리가 나뉘어 있어 필요한 것만 참조합니다. 현재 기능: 레드닷(경로 트리 기반 알림 배지).",
+  "description": "여러 게임에서 반복해서 만드는 게임 시스템을 모아 둔 패키지입니다. 기능마다 어셈블리가 나뉘어 있어 필요한 것만 참조합니다. 현재 기능: 레드닷(경로 트리 기반 알림 배지, 배지 종류와 우선순위 표시), 기능 개방(조건 판정 결과로 기능 잠금, 원격 차단).",
   "type": "library",
   "hideInEditor": false,
   "dependencies": {

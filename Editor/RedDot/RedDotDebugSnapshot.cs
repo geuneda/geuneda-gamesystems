@@ -60,7 +60,10 @@ namespace Geuneda.GameSystems.RedDot.Editor
 			return new RedDotDebugSnapshot(roots, unregistered, nodes.Count, service.OpenBatchCount);
 		}
 
-		/// <summary> 트리 한 줄에 표시할 글자. 예: "Shop = 0 [뮤트, 원래 3] 구독 2" </summary>
+		/// <summary>
+		/// 트리 한 줄에 표시할 글자. 예: "Shop = 0 [뮤트, 원래 3] 구독 2".
+		/// 종류가 둘 이상이면 리프는 자기 종류("{종류 1}"), 부모는 뮤트를 무시한 종류별 값 중 0이 아닌 것("{0:1 2:2}")을 붙인다.
+		/// </summary>
 		/// <param name="entry">표시할 노드</param>
 		/// <returns>표시 글자</returns>
 		public static string FormatLabel(Entry entry)
@@ -71,12 +74,31 @@ namespace Geuneda.GameSystems.RedDot.Editor
 				label += $" [뮤트, 원래 {entry.UnmutedValue}]";
 			}
 
+			if (entry.UnmutedKindValues.Count > 1)
+			{
+				label += entry.Children.Count == 0 ? $" {{종류 {entry.Kind}}}" : FormatKindValues(entry.UnmutedKindValues);
+			}
+
 			if (entry.ListenerCount > 0)
 			{
 				label += $" 구독 {entry.ListenerCount}";
 			}
 
 			return label;
+		}
+
+		private static string FormatKindValues(IReadOnlyList<int> values)
+		{
+			string text = null;
+			for (int kind = 0; kind < values.Count; kind++)
+			{
+				if (values[kind] > 0)
+				{
+					text = (text == null ? " {" : text + " ") + $"{kind}:{values[kind]}";
+				}
+			}
+
+			return text == null ? string.Empty : text + "}";
 		}
 
 		private static Entry CreateEntry(RedDotNode node)
@@ -92,7 +114,13 @@ namespace Geuneda.GameSystems.RedDot.Editor
 			int separator = node.Path.LastIndexOf(RedDotService.Separator);
 			string name = separator < 0 ? node.Path : node.Path.Substring(separator + 1);
 			int listenerCount = node.Subscription?.Listeners.Count ?? 0;
-			return new Entry(name, node.Path, node.Value, node.UnmutedValue, node.Muted, listenerCount, children);
+			var kindValues = new int[node.KindCount];
+			for (int kind = 0; kind < kindValues.Length; kind++)
+			{
+				kindValues[kind] = node.GetUnmutedKindValue(kind);
+			}
+
+			return new Entry(name, node.Path, node.Value, node.UnmutedValue, node.Muted, node.Kind, kindValues, listenerCount, children);
 		}
 
 		private static int CompareByName(Entry a, Entry b)
@@ -103,13 +131,16 @@ namespace Geuneda.GameSystems.RedDot.Editor
 		/// <summary> 노드 하나의 사본 </summary>
 		internal sealed class Entry
 		{
-			public Entry(string name, string path, int value, int unmutedValue, bool muted, int listenerCount, IReadOnlyList<Entry> children)
+			public Entry(string name, string path, int value, int unmutedValue, bool muted, int kind, IReadOnlyList<int> unmutedKindValues,
+				int listenerCount, IReadOnlyList<Entry> children)
 			{
 				Name = name;
 				Path = path;
 				Value = value;
 				UnmutedValue = unmutedValue;
 				Muted = muted;
+				Kind = kind;
+				UnmutedKindValues = unmutedKindValues ?? Array.Empty<int>();
 				ListenerCount = listenerCount;
 				Children = children ?? Array.Empty<Entry>();
 			}
@@ -129,7 +160,13 @@ namespace Geuneda.GameSystems.RedDot.Editor
 			/// <summary> 뮤트 여부 </summary>
 			public bool Muted { get; }
 
-			/// <summary> 이 경로의 구독자 수 </summary>
+			/// <summary> 리프일 때 값이 들어가는 종류 </summary>
+			public int Kind { get; }
+
+			/// <summary> 뮤트를 무시한 종류별 값. 길이는 서비스의 종류 수다. </summary>
+			public IReadOnlyList<int> UnmutedKindValues { get; }
+
+			/// <summary> 이 경로의 구독자 수(모든 종류의 구독 포함) </summary>
 			public int ListenerCount { get; }
 
 			/// <summary> 자식 노드들. 이름 순(서수 비교)이다. </summary>

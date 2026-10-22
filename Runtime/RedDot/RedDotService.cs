@@ -12,6 +12,12 @@ namespace Geuneda.GameSystems.RedDot
 		/// <summary> 경로 계층 구분자 </summary>
 		public const char Separator = '/';
 
+		/// <summary> 종류를 받는 메서드에 넘기면 모든 종류의 합을 뜻한다. </summary>
+		public const int AllKinds = -1;
+
+		/// <summary> 만들 수 있는 최대 종류 수 </summary>
+		public const int MaxKindCount = 32;
+
 		/// <summary> 한 번의 알림 처리에서 경로 하나를 알릴 수 있는 최대 횟수. 넘으면 콜백이 값을 계속 바꾸는 순환으로 본다. </summary>
 		internal const int MaxNotificationsPerPath = 100;
 
@@ -26,19 +32,38 @@ namespace Geuneda.GameSystems.RedDot
 		// 한 번의 Flush 에서 경로별로 알린 횟수. 구독 객체가 아니라 경로로 세야 콜백이 해제 후 재구독해도 상한이 유지된다.
 		private readonly Dictionary<string, int> _notificationCounts = new Dictionary<string, int>();
 
+		private readonly int _kindCount;
+
 		private bool _flushing;
 		private int _lastBatchId;
 		private ReadOnlyCollection<string> _paths;
 
-		/// <summary> 빈 트리로 만든다. </summary>
-		public RedDotService()
+		/// <summary> 종류를 나누지 않는 빈 트리로 만든다. </summary>
+		public RedDotService() : this(1)
 		{
+		}
+
+		/// <summary> 배지 종류 수를 정해 빈 트리로 만든다. </summary>
+		/// <param name="kindCount">1 이상 <see cref="MaxKindCount"/> 이하의 종류 수</param>
+		/// <exception cref="ArgumentOutOfRangeException">종류 수가 범위 밖일 때</exception>
+		public RedDotService(int kindCount)
+		{
+			if (kindCount < 1 || kindCount > MaxKindCount)
+			{
+				throw new ArgumentOutOfRangeException(nameof(kindCount), kindCount, $"종류 수는 1 이상 {MaxKindCount} 이하여야 한다.");
+			}
+
+			_kindCount = kindCount;
+
 			// 범위마다 델리게이트를 만들지 않도록 한 번만 만든다.
 			_endBatch = EndBatch;
 		}
 
 		/// <inheritdoc />
 		public IReadOnlyCollection<string> Paths => _paths ??= Array.AsReadOnly(CopyPaths());
+
+		/// <inheritdoc />
+		public int KindCount => _kindCount;
 
 		/// <summary> 경로별 노드. 에디터 디버그 창이 트리를 읽을 때 쓴다. </summary>
 		internal IReadOnlyDictionary<string, RedDotNode> Nodes => _nodes;
@@ -59,25 +84,23 @@ namespace Geuneda.GameSystems.RedDot
 				return;
 			}
 
-			// 루트부터 내려가며 없는 노드를 만든다. "A/B/C" 이면 "A", "A/B", "A/B/C" 순이다.
-			// 알림은 대기열에만 쌓이므로 경로 전체를 다 붙인 뒤에야 구독자가 호출된다.
-			RedDotNode parent = null;
-			int end = path.IndexOf(Separator);
-			while (true)
+			CreatePath(path, 0);
+			Flush();
+		}
+
+		/// <inheritdoc />
+		public void RegisterNode(string path, int kind)
+		{
+			ValidatePath(path);
+			ValidateKind(kind, false);
+
+			if (_nodes.TryGetValue(path, out var existing))
 			{
-				string current = end < 0 ? path : path.Substring(0, end);
-				if (!_nodes.TryGetValue(current, out var node))
-				{
-					node = CreateNode(current, parent);
-				}
-
-				if (end < 0)
-				{
-					break;
-				}
-
-				parent = node;
-				end = path.IndexOf(Separator, end + 1);
+				existing.SetKind(kind);
+			}
+			else
+			{
+				CreatePath(path, kind);
 			}
 
 			Flush();
@@ -134,12 +157,27 @@ namespace Geuneda.GameSystems.RedDot
 		}
 
 		/// <inheritdoc />
+		public int GetValue(string path, int kind)
+		{
+			ValidateKind(kind, true);
+			return ReadValue(path, kind);
+		}
+
+		/// <inheritdoc />
 		public void Subscribe(string path, Action<int> callback)
+		{
+			Subscribe(path, AllKinds, callback);
+		}
+
+		/// <inheritdoc />
+		public void Subscribe(string path, int kind, Action<int> callback)
 		{
 			if (callback == null)
 			{
 				throw new ArgumentNullException(nameof(callback));
 			}
+
+			ValidateKind(kind, true);
 
 			if (!_subscriptions.TryGetValue(path, out var subscription))
 			{
@@ -153,11 +191,17 @@ namespace Geuneda.GameSystems.RedDot
 			}
 
 			// 구독자는 구독 직후 GetValue 로 현재 값을 읽으므로, 그 값을 이 구독자의 기준값으로 삼는다.
-			subscription.Listeners.Add(new RedDotListener(callback, GetValue(path)));
+			subscription.Listeners.Add(new RedDotListener(callback, kind, ReadValue(path, kind)));
 		}
 
 		/// <inheritdoc />
 		public void Unsubscribe(string path, Action<int> callback)
+		{
+			Unsubscribe(path, AllKinds, callback);
+		}
+
+		/// <inheritdoc />
+		public void Unsubscribe(string path, int kind, Action<int> callback)
 		{
 			if (callback == null || !_subscriptions.TryGetValue(path, out var subscription))
 			{
@@ -168,7 +212,7 @@ namespace Geuneda.GameSystems.RedDot
 			var listeners = subscription.Listeners;
 			for (int i = listeners.Count - 1; i >= 0; i--)
 			{
-				if (listeners[i].Callback == callback)
+				if (listeners[i].Kind == kind && listeners[i].Callback == callback)
 				{
 					listeners[i].Active = false;
 					listeners.RemoveAt(i);
@@ -223,9 +267,36 @@ namespace Geuneda.GameSystems.RedDot
 			Flush();
 		}
 
-		private RedDotNode CreateNode(string path, RedDotNode parent)
+		/// <summary> 없는 노드를 루트부터 만든다. 마지막 노드만 지정한 종류이고 조상은 종류 0이다. </summary>
+		/// <param name="path">만들 노드 경로</param>
+		/// <param name="kind">마지막 노드의 종류</param>
+		private void CreatePath(string path, int kind)
 		{
-			var node = new RedDotNode(path, parent, _pending);
+			// 루트부터 내려가며 없는 노드를 만든다. "A/B/C" 이면 "A", "A/B", "A/B/C" 순이다.
+			// 알림은 대기열에만 쌓이므로 경로 전체를 다 붙인 뒤에야 구독자가 호출된다.
+			RedDotNode parent = null;
+			int end = path.IndexOf(Separator);
+			while (true)
+			{
+				string current = end < 0 ? path : path.Substring(0, end);
+				if (!_nodes.TryGetValue(current, out var node))
+				{
+					node = CreateNode(current, parent, end < 0 ? kind : 0);
+				}
+
+				if (end < 0)
+				{
+					break;
+				}
+
+				parent = node;
+				end = path.IndexOf(Separator, end + 1);
+			}
+		}
+
+		private RedDotNode CreateNode(string path, RedDotNode parent, int kind)
+		{
+			var node = new RedDotNode(path, parent, kind, _kindCount, _pending);
 			if (_subscriptions.TryGetValue(path, out var subscription))
 			{
 				node.Subscription = subscription;
@@ -308,7 +379,7 @@ namespace Geuneda.GameSystems.RedDot
 		}
 
 		/// <summary>
-		/// 한 경로의 구독자를 하나씩 알린다. 구독자마다 호출 직전에 현재 값을 다시 읽고,
+		/// 한 경로의 구독자를 하나씩 알린다. 구독자마다 호출 직전에 그 구독자가 받는 종류의 현재 값을 다시 읽고,
 		/// 그 구독자에게 마지막으로 전달한 값과 다를 때만 호출한다. 그래서 구독자가 마지막으로 받는 값은 항상 현재 값이다.
 		/// 목록은 스냅샷으로 순회하며, 도중에 해제된 구독자는 호출하지 않는다.
 		/// 도중에 일괄 범위가 열리면 이 구독을 대기열에 다시 넣고 멈춘다.
@@ -343,7 +414,7 @@ namespace Geuneda.GameSystems.RedDot
 						continue;
 					}
 
-					int value = GetValue(subscription.Path);
+					int value = ReadValue(subscription.Path, listener.Kind);
 					if (value == listener.NotifiedValue)
 					{
 						continue;
@@ -365,6 +436,28 @@ namespace Geuneda.GameSystems.RedDot
 			{
 				ArrayPool<RedDotListener>.Shared.Return(snapshot, true);
 			}
+		}
+
+		/// <summary> 검사를 마친 종류로 값을 읽는다. 없는 경로는 0이다. </summary>
+		private int ReadValue(string path, int kind)
+		{
+			if (!_nodes.TryGetValue(path, out var node))
+			{
+				return 0;
+			}
+
+			return kind == AllKinds ? node.Value : node.GetKindValue(kind);
+		}
+
+		private void ValidateKind(int kind, bool allowAll)
+		{
+			if ((kind >= 0 && kind < _kindCount) || (allowAll && kind == AllKinds))
+			{
+				return;
+			}
+
+			string range = allowAll ? $"{AllKinds}(모든 종류) 이거나 0 이상 {_kindCount} 미만" : $"0 이상 {_kindCount} 미만";
+			throw new ArgumentOutOfRangeException(nameof(kind), kind, $"종류는 {range}이어야 한다.");
 		}
 
 		private string[] CopyPaths()
