@@ -5,7 +5,7 @@
 ## 1. 패키지 개요
 - **패키지**: `com.geuneda.gamesystems`
 - **Unity**: 6000.3+
-- **의존성**: `com.geuneda.services` (5.1.0) — `RedDotBinding.Bind(path)`가 `MainInstaller`로 서비스를 찾고 `MainInstaller.BindingChanged`로 늦은 바인딩·교체를 따라갑니다. 레드닷 asmdef는 `Geuneda.Core`(로거 `ModuleLogger`)와 `Geuneda.Services`를 참조합니다.
+- **의존성**: `com.geuneda.services` (5.1.0) — `RedDotBinding.Bind(path)`, `FeatureUnlockBinding.Bind(featureId)`가 `MainInstaller`로 서비스를 찾고 `MainInstaller.BindingChanged`로 늦은 바인딩·교체를 따라갑니다. 레드닷·기능 개방 asmdef는 `Geuneda.Core`(로거 `ModuleLogger`)와 `Geuneda.Services`를 참조합니다.
 
 여러 게임 프로젝트에서 반복해서 구현하던 게임 시스템을 모은 패키지입니다.
 한 기능은 `Runtime/<Feature>/` 폴더 하나와 asmdef 하나로 구성합니다.
@@ -54,7 +54,26 @@
 - **`Paths`**: 노드 키를 복사한 `ReadOnlyCollection` 스냅샷을 캐시하고, 노드를 만들거나 지울 때(`CreateNode`, `RemoveSubtree`, `Clear`) 무효화합니다. 사전의 `KeyCollection`을 그대로 내보내지 마세요(순회 중 등록하면 예외).
 - **바인딩의 MainInstaller 추적**: `RedDotBinding.Bind(path)`는 처음 한 번만 `MainInstaller.BindingChanged`에 등록하고 경로만 바꿀 때는 그대로 둡니다(리스트 셀). `Unbind`와 빈 경로 `Bind`만 해제합니다. 처리기는 `_followsInstaller`가 꺼져 있으면 무시합니다(진행 중인 알림의 스냅샷에 남은 처리기). 서비스가 바뀌면 이전 서비스 구독을 풀고 새 서비스를 구독한 뒤, 마지막으로 전달한 값과 다를 때만 전달합니다. `Bind(...)` 자체는 항상 현재 값을 전달합니다(기존 계약). `Bind(service, path)`는 `MainInstaller`를 따라가지 않습니다.
 
-## 4. 테스트 실행
+## 4. 기능 개방 (`Runtime/FeatureUnlock/`)
+
+| 타입 | 공개 여부 | 역할 |
+|---|---|---|
+| `IFeatureUnlockService` | public | 서비스 계약. `StateChanged(featureId, unlocked)` 이벤트 |
+| `FeatureUnlockService` | public | 기능 ID → (판정 함수, 마지막 판정 결과) 사전, 원격 차단 집합, 기능별 마지막으로 알린 상태, 알림 대기열과 Flush |
+| `FeatureUnlockBinding` | public | 기능 하나의 구독 POCO. `RedDotBinding`과 같은 `MainInstaller.BindingChanged` 추적. 서비스가 없으면 잠김, 빈 ID는 열림 |
+| `FeatureLockView` | public sealed | 프리팹용 컴포넌트. 잠김·열림 오브젝트 토글 + `StateChanged`. 발행마다 세대 번호를 올리고 처리기마다 검사(중첩 `Apply`·`OnDisable` 뒤 옛 상태 차단), 처리기별 try/catch. 자신/조상 표시 오브젝트는 무시 |
+
+### 설계 불변식
+
+- **열림 여부 = 차단 아님 && (미등록 || 조건 무시 || 마지막 판정)**: `ReadState` 한 곳에서만 계산합니다. `IsUnlocked`는 판정 함수를 부르지 않습니다(화면이 매 프레임 읽어도 게임 코드가 돌지 않게). 판정은 `Register`, `Refresh()`, `Refresh(id)`에서만 합니다.
+- **알림은 상태 비교로**: 상태를 바꾸는 메서드는 바뀌었을 수 있는 ID를 대기열에 넣고 끝에서 `Flush`합니다. `Flush`는 알릴 때 현재 상태를 다시 읽고 `_published`(없으면 처음 기준 열림)와 다를 때만 알립니다. 그래서 처리기 안의 변경이 이어서 와도 뒤의 처리기가 마지막으로 받는 값은 현재 상태입니다. 처음 기준을 열림으로 둔 것은 "등록하지 않은 기능 = 열림"과 같아서이며, 로그인 때 이미 열린 기능은 알리지 않는다는 계약의 근거입니다. 처음 기준으로 돌아온 미등록·미차단 ID는 `_published`에서 지웁니다.
+- **판정 중에는 알리지 않음**: 판정 함수 호출은 `_evaluatingDepth`로 감싸고, 그동안 `Flush`는 아무것도 하지 않습니다. 판정을 부른 공개 메서드가 끝에서 `Flush`합니다. `Refresh()`는 기능 사본 배열로 돌고, 판정 함수가 지운(또는 바꿔 등록한) 기능은 건너뜁니다.
+- **예외 격리**: 판정 함수 예외는 Error 로그 후 잠김(열어 두면 조건을 건너뜀), 처리기 예외는 Error 로그 후 나머지 처리기를 계속 부릅니다.
+- **순환 상한**: Flush 한 번에 기능별 알림 횟수를 세고 `MaxNotificationsPerFeature`(100)를 넘으면 처음 넘을 때 오류 로그 후 그 처리에서 건너뜁니다(`_published`는 그대로라 다음 변경 때 현재 상태를 알림).
+- **바인딩**: 전역 `StateChanged`를 바인딩마다 고유 델리게이트로 구독하고 ID로 거릅니다. 전달 값 대신 지금 구독한 서비스의 상태를 다시 읽고, 마지막으로 전달한 값과 다를 때만 전달합니다(처리기 안에서 서비스를 바꾼 경우 이전 서비스의 알림을 막음).
+- **레드닷과 묶지 않음**: 기능 asmdef끼리 참조하지 않는다는 규칙대로, 잠긴 기능의 배지 뮤트는 게임 코드가 `StateChanged`에서 `SetNodeMuted`로 잇습니다(README 예시).
+
+## 5. 테스트 실행
 
 호스트 프로젝트 `Packages/manifest.json`에 패키지를 로컬 경로로 넣고 `testables`에 등록합니다.
 
@@ -70,7 +89,7 @@
 <Unity 실행 파일> -batchmode -projectPath <host-project> -runTests -testPlatform PlayMode -testResults playmode.xml
 ```
 
-## 5. 코드 규칙
+## 6. 코드 규칙
 
 - C# 9.0, 명시적 네임스페이스, 탭 들여쓰기, `using`은 네임스페이스 밖.
 - private 필드 `_camelCase`, 공개 API에는 한국어 XML 문서 주석.

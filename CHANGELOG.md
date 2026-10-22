@@ -14,6 +14,7 @@
 - `RedDotView` 의 `_kind`(기본 -1 = 모든 종류의 합), `Kind` 프로퍼티. `RedDotBinding(callback, kind)` 와 `Kind` 프로퍼티.
 - `RedDotPriorityGroup`: 종류별 `RedDotView` 를 우선순위 순서로 묶어, 값이 1 이상인 첫 항목의 표시 오브젝트만 켭니다(`ActiveIndex`).
 - 디버그 창이 종류가 둘 이상일 때 리프의 종류와 부모의 종류별 값을 함께 보여 줍니다.
+- 기능 개방(`Geuneda.GameSystems.FeatureUnlock`, 새 어셈블리): 기능 ID마다 게임이 넘긴 판정 함수로 잠금을 정하고(`IFeatureUnlockService`/`FeatureUnlockService`), 열림 여부가 바뀔 때만 `StateChanged` 로 알립니다. 처음 기준은 열림이라 잠김을 거쳐 열릴 때만 열림을 알립니다. 원격 차단(`SetDisabled`), 개발용 조건 무시(`IgnoreConditions`), `MainInstaller` 를 따라가는 `FeatureUnlockBinding`, 잠김·열림 표시 컴포넌트 `FeatureLockView`(서비스가 없으면 잠김).
 
 **문서**:
 - 씬과 수명이 같은 노드를 한 루트 아래 두고 `UnregisterNode` 로 한 번에 정리하는 방법을 README 에 적었습니다.
