@@ -106,6 +106,36 @@ namespace GeunedaEditor.GameSystems.Tests
 			Assert.AreEqual(0, snapshot.Roots[0].Value);
 		}
 
+		[Test]
+		public void Capture_WithKinds_ShowsLeafKindAndParentKindValues()
+		{
+			var service = new RedDotService(3);
+			service.RegisterNode("Lobby/Equip", 2);
+			service.RegisterNode("Lobby/Mail", 0);
+			service.RegisterNode("Lobby/Pet", 1);
+			service.SetLeafValue("Lobby/Equip", 2);
+			service.SetLeafValue("Lobby/Mail", 1);
+			service.SetNodeMuted("Lobby", true);
+
+			var lobby = RedDotDebugSnapshot.Capture(service).Roots[0];
+
+			CollectionAssert.AreEqual(new[] { 1, 0, 2 }, lobby.UnmutedKindValues);
+			Assert.AreEqual("Lobby = 0 [뮤트, 원래 3] {0:1 2:2}", RedDotDebugSnapshot.FormatLabel(lobby));
+			Assert.AreEqual("Pet = 0 {종류 1}", RedDotDebugSnapshot.FormatLabel(lobby.Children[2]));
+		}
+
+		[Test]
+		public void FormatLabel_SingleKind_OmitsKinds()
+		{
+			_service.RegisterNode("A/B");
+			_service.SetLeafValue("A/B", 1);
+
+			var a = RedDotDebugSnapshot.Capture(_service).Roots[0];
+
+			Assert.AreEqual("A = 1", RedDotDebugSnapshot.FormatLabel(a));
+			Assert.AreEqual("B = 1", RedDotDebugSnapshot.FormatLabel(a.Children[0]));
+		}
+
 		private static List<string> Names(IReadOnlyList<RedDotDebugSnapshot.Entry> entries)
 		{
 			var names = new List<string>();

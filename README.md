@@ -163,6 +163,56 @@ using (redDot.BeginBatch())
 redDot.SetNodeMuted(RedDotPaths.Lobby_Season, !isSeasonOpen);
 ```
 
+### 배지 종류
+
+한 버튼에 빨간 점, 새 항목 표시, 강화 가능 표시처럼 모양이 다른 배지가 겹친다면 서비스를 만들 때 종류 수를 정합니다.
+리프마다 종류를 하나 두고, 부모는 종류마다 따로 합합니다. 종류를 받지 않는 메서드(`GetValue(path)`, `Subscribe(path, callback)`)는 모든 종류의 합을 다룹니다.
+종류 번호의 뜻과 우선순위는 게임이 정합니다.
+
+```csharp
+public static class BadgeKinds
+{
+	public const int Red = 0;
+	public const int New = 1;
+	public const int Upgrade = 2;
+	public const int Count = 3;
+}
+
+var redDot = new RedDotService(BadgeKinds.Count);   // 1 ~ RedDotService.MaxKindCount(32)
+redDot.RegisterNode("Equip/Slot1/Upgrade", BadgeKinds.Upgrade);
+redDot.RegisterNode("Equip/Slot1/New", BadgeKinds.New);
+redDot.SetLeafValue("Equip/Slot1/New", 1);
+
+redDot.GetValue("Equip", BadgeKinds.New);   // 1
+redDot.GetValue("Equip");                   // 1 (모든 종류의 합)
+redDot.Subscribe("Equip", BadgeKinds.Upgrade, OnUpgradeChanged);   // 강화 가능 값만 받음
+```
+
+- `RegisterNode(path, kind)`는 새 노드를 그 종류로 만들고, 없는 조상은 종류 0으로 만듭니다. 이미 있는 노드면 종류만 바꿉니다(리프 값이 새 종류로 옮겨 가고 합은 그대로). `RegisterNode(path)`는 새 노드를 종류 0으로 만들고 있는 노드의 종류는 건드리지 않습니다.
+- 뮤트는 모든 종류를 0으로 잡습니다.
+- 종류 구독자는 그 종류의 값이 바뀔 때만 불립니다. 빨간 점이 꺼지고 같은 수의 새 항목이 켜지면 합 구독자는 불리지 않고 두 종류 구독자만 불립니다.
+- 범위 밖의 종류(`RegisterNode`는 0 이상 `KindCount` 미만, 조회·구독은 그 범위나 `RedDotService.AllKinds`(-1))는 `ArgumentOutOfRangeException`입니다.
+- 종류가 하나(`new RedDotService()`)면 종류를 쓰지 않을 때와 같습니다.
+
+화면에서는 `RedDotView`의 `_kind`에 종류를 넣습니다(기본 -1 = 모든 종류의 합). 겹친 배지 중 하나만 보이려면 종류별 뷰를 `RedDotPriorityGroup`으로 묶습니다.
+그룹은 항목 목록에서 값이 1 이상인 첫 항목(앞이 우선순위가 높음)의 표시 오브젝트만 켜고 나머지는 끕니다. 묶은 뷰의 `_indicator`는 비워 둡니다.
+
+```
+EquipSlotButton
+├─ RedDotView (_nodePath "Equip/Slot1", _kind 2)   ← 강화 가능
+├─ RedDotView (_nodePath "Equip/Slot1", _kind 1)   ← 새 항목
+├─ RedDotPriorityGroup (_entries: [강화 가능 뷰 → LevelUpMark], [새 항목 뷰 → NewMark])
+├─ LevelUpMark
+└─ NewMark
+```
+
+`RedDotBinding`도 `new RedDotBinding(callback, kind)`로 한 종류만 받을 수 있습니다.
+
+### 씬 단위 노드 정리
+
+맵 안에서만 쓰는 노드처럼 씬과 수명이 같은 노드는 한 루트 아래에 두고(예: `Map/...`), 씬을 떠날 때 `UnregisterNode("Map")`으로 한 번에 지웁니다.
+구독은 유지되므로 다음 씬에서 같은 경로를 다시 등록하면 화면이 이어서 알림을 받습니다.
+
 ### 동작 규칙
 
 - 값은 0 이상 정수입니다. 0이면 꺼짐, 1 이상이면 켜짐입니다. 음수는 0으로 보정합니다.
@@ -182,7 +232,7 @@ redDot.SetNodeMuted(RedDotPaths.Lobby_Season, !isSeasonOpen);
 
 `Tools > Geuneda > RedDot Debugger`를 열면 플레이 중 `MainInstaller`의 `RedDotService` 트리를 0.25초마다 보여 줍니다.
 
-- 노드마다 값, 뮤트 여부와 뮤트 전 값, 구독자 수를 표시합니다.
+- 노드마다 값, 뮤트 여부와 뮤트 전 값, 구독자 수를 표시합니다. 종류가 둘 이상이면 리프는 종류(`{종류 1}`), 부모는 0이 아닌 종류별 값(`{0:1 2:2}`)도 표시합니다.
 - 노드 없이 구독만 있는 경로를 따로 나열합니다. 경로 오타로 배지가 안 뜰 때 여기서 찾습니다.
 - 열린 일괄 범위가 있으면 경고합니다.
 - 플레이 모드가 아니면 아무것도 읽지 않습니다. `IRedDotService`를 직접 구현한 서비스는 트리를 읽을 수 없어 안내만 표시합니다.
@@ -196,7 +246,7 @@ redDot.SetNodeMuted(RedDotPaths.Lobby_Season, !isSeasonOpen);
 
 - Unity 6000.3 이상
 - `com.geuneda.services` 5.1.0 이상 (core, gamedata, UniTask, Addressables를 함께 끌어옵니다. `MainInstaller.BindingChanged`를 씁니다)
-- 기능끼리는 서로 참조하지 않으며, 기능 어셈블리는 `Geuneda.GameData`, `Geuneda.Services`에만 의존할 수 있습니다. 레드닷은 `Geuneda.Services`만 참조합니다.
+- 기능끼리는 서로 참조하지 않으며, 기능 어셈블리는 `Geuneda.Core`, `Geuneda.GameData`, `Geuneda.Services`에만 의존할 수 있습니다. 레드닷은 `Geuneda.Core`(로거), `Geuneda.Services`를 참조합니다.
 
 ## 라이선스
 

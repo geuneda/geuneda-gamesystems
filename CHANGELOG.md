@@ -4,6 +4,20 @@
 이 형식은 [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)를 기반으로 하며,
 이 프로젝트는 [유의적 버전](http://semver.org/spec/v2.0.0.html)을 따릅니다.
 
+## [0.4.0] - 2026-10-22
+
+**호환되지 않는 변경**:
+- `IRedDotService` 에 배지 종류 멤버(`KindCount`, `RegisterNode(path, kind)`, `GetValue(path, kind)`, `Subscribe(path, kind, callback)`, `Unsubscribe(path, kind, callback)`)가 추가되어, 이 인터페이스를 직접 구현한 클래스는 구현해야 합니다. `RedDotService` 를 쓰는 코드는 그대로 동작합니다(종류 하나, 기존과 같은 값과 알림).
+
+**새 기능**:
+- 배지 종류: `new RedDotService(kindCount)`(1~32)로 만들면 리프마다 종류를 하나 두고(`RegisterNode(path, kind)`) 부모는 종류마다 따로 합합니다. 빨간 점, 새 항목, 강화 가능처럼 모양이 다른 배지를 한 트리에서 다룹니다. 종류를 받지 않는 메서드는 모든 종류의 합이고, `RedDotService.AllKinds`(-1)도 같은 뜻입니다. 종류 구독자는 그 종류의 값이 바뀔 때만 불립니다. 이미 있는 노드에 `RegisterNode(path, kind)` 하면 종류만 바뀌고 리프 값이 새 종류로 옮겨 갑니다.
+- `RedDotView` 의 `_kind`(기본 -1 = 모든 종류의 합), `Kind` 프로퍼티. `RedDotBinding(callback, kind)` 와 `Kind` 프로퍼티.
+- `RedDotPriorityGroup`: 종류별 `RedDotView` 를 우선순위 순서로 묶어, 값이 1 이상인 첫 항목의 표시 오브젝트만 켭니다(`ActiveIndex`).
+- 디버그 창이 종류가 둘 이상일 때 리프의 종류와 부모의 종류별 값을 함께 보여 줍니다.
+
+**문서**:
+- 씬과 수명이 같은 노드를 한 루트 아래 두고 `UnregisterNode` 로 한 번에 정리하는 방법을 README 에 적었습니다.
+
 ## [0.3.1] - 2026-10-17
 
 **변경**:

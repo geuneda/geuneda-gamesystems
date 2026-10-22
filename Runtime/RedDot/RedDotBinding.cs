@@ -29,16 +29,39 @@ namespace Geuneda.GameSystems.RedDot
 		private bool _followsInstaller;
 		private int _deliveredValue;
 
+		/// <summary> 모든 종류의 합을 받는 바인딩을 만든다. </summary>
 		/// <param name="onValueChanged">값을 받을 콜백. Bind 직후 현재 값, 이후 바뀐 값이 전달된다.</param>
 		/// <exception cref="ArgumentNullException">콜백이 null 일 때</exception>
-		public RedDotBinding(Action<int> onValueChanged)
+		public RedDotBinding(Action<int> onValueChanged) : this(onValueChanged, RedDotService.AllKinds)
+		{
+		}
+
+		/// <summary> 한 종류의 값을 받는 바인딩을 만든다. </summary>
+		/// <param name="onValueChanged">값을 받을 콜백. Bind 직후 현재 값, 이후 바뀐 값이 전달된다.</param>
+		/// <param name="kind">
+		/// 받을 종류. <see cref="RedDotService.AllKinds"/> 면 모든 종류의 합이다.
+		/// 구독할 서비스의 <see cref="IRedDotService.KindCount"/> 미만이어야 하며, 아니면 구독할 때 <see cref="ArgumentOutOfRangeException"/> 이 난다.
+		/// </param>
+		/// <exception cref="ArgumentNullException">콜백이 null 일 때</exception>
+		/// <exception cref="ArgumentOutOfRangeException">종류가 <see cref="RedDotService.AllKinds"/> 보다 작을 때</exception>
+		public RedDotBinding(Action<int> onValueChanged, int kind)
 		{
 			_onValueChanged = onValueChanged ?? throw new ArgumentNullException(nameof(onValueChanged));
+
+			if (kind < RedDotService.AllKinds)
+			{
+				throw new ArgumentOutOfRangeException(nameof(kind), kind, $"종류는 {RedDotService.AllKinds}(모든 종류) 이상이어야 한다.");
+			}
+
+			Kind = kind;
 
 			// 바인딩마다 고유한 델리게이트로 구독해야, 같은 콜백을 쓰는 다른 바인딩의 구독을 잘못 해제하지 않는다.
 			_forward = Forward;
 			_onBindingChanged = OnBindingChanged;
 		}
+
+		/// <summary> 받는 종류. <see cref="RedDotService.AllKinds"/> 면 모든 종류의 합이다. </summary>
+		public int Kind { get; }
 
 		/// <summary> 마지막으로 Bind 한 경로. Unbind 후에도 유지된다. </summary>
 		public string Path { get; private set; }
@@ -135,9 +158,9 @@ namespace Geuneda.GameSystems.RedDot
 				return 0;
 			}
 
-			service.Subscribe(Path, _forward);
+			service.Subscribe(Path, Kind, _forward);
 			_service = service;
-			return service.GetValue(Path);
+			return service.GetValue(Path, Kind);
 		}
 
 		private void Deliver(int value)
@@ -153,7 +176,7 @@ namespace Geuneda.GameSystems.RedDot
 				return;
 			}
 
-			_service.Unsubscribe(Path, _forward);
+			_service.Unsubscribe(Path, Kind, _forward);
 			_service = null;
 		}
 
